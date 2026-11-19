@@ -1,0 +1,171 @@
+// Where accounts, rankings and friends are kept.
+// Two versions with the same functions: practice mode (this browser only) and Supabase (live).
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js';
+
+export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
+
+const RATING_FIELDS = ['song_id', 'title', 'artist', 'album', 'genre', 'release_year', 'artwork_url', 'preview_url', 'score', 'tags'];
+const pick = (r) => Object.fromEntries(RATING_FIELDS.map((f) => [f, r[f] ?? null]));
+
+function groupFriends(rows, profiles, uid) {
+  const byId = new Map(profiles.map((p) => [p.id, p]));
+  const out = { accepted: [], incoming: [], outgoing: [] };
+  for (const f of rows) {
+    const otherId = f.requester === uid ? f.addressee : f.requester;
+    const p = byId.get(otherId) || { id: otherId, display_name: 'Someone' };
+    if (f.status === 'accepted') out.accepted.push(p);
+    else if (f.addressee === uid) out.incoming.push(p);
+    else out.outgoing.push(p);
+  }
+  return out;
+}
+
+export async function createStore() {
+  return isDemo ? demoStore() : supabaseStore();
+}
+
+// ---------------------------------------------------------------- practice mode
+
+function demoStore() {
+  const KEY = 'songrank-practice-v1';
+  let db;
+  try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
+  if (!db) db = seed();
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* private window */ } };
+  const code = () => Math.random().toString(16).slice(2, 8).toUpperCase();
+  let uid = db.session;
+
+  return {
+    async currentUser() { return uid && db.users[uid] ? uid : null; },
+    async signUp(name, email) {
+      email = email.trim().toLowerCase();
+      if (db.accounts[email]) throw new Error('That email already has a practice account. Sign in instead.');
+      uid = `u-${Date.now()}`;
+      db.accounts[email] = uid;
+      db.users[uid] = { id: uid, display_name: name.trim() || 'Music fan', friend_code: code() };
+      db.ratings[uid] = [];
+      db.session = uid; save();
+      return { needsConfirm: false };
+    },
+    async signIn(email) {
+      const id = db.accounts[email.trim().toLowerCase()];
+      if (!id) throw new Error('No practice account with that email yet. Create one first.');
+      uid = id; db.session = uid; save();
+    },
+    async signOut() { uid = null; db.session = null; save(); },
+    async me() { return db.users[uid]; },
+    async ratingsOf(id) { return [...(db.ratings[id] || [])].sort((a, b) => b.score - a.score); },
+    async saveRating(r) {
+      const list = db.ratings[uid];
+      const row = { ...pick(r), rated_at: new Date().toISOString() };
+      const i = list.findIndex((x) => x.song_id === r.song_id);
+      if (i >= 0) list[i] = row; else list.push(row);
+      save();
+    },
+    async deleteRating(songId) { db.ratings[uid] = db.ratings[uid].filter((x) => x.song_id !== songId); save(); },
+    async friends() {
+      const rows = db.friendships.filter((f) => f.requester === uid || f.addressee === uid);
+      return groupFriends(rows, Object.values(db.users), uid);
+    },
+    async addFriend(c) {
+      const target = Object.values(db.users).find((u) => u.friend_code === c.trim().toUpperCase());
+      if (!target) throw new Error('No one has that friend code.');
+      if (target.id === uid) throw new Error("That's your own code.");
+      const reverse = db.friendships.find((f) => f.requester === target.id && f.addressee === uid);
+      if (reverse) { reverse.status = 'accepted'; save(); return 'You are now friends.'; }
+      if (db.friendships.some((f) => f.requester === uid && f.addressee === target.id)) return 'Request already sent.';
+      // The made-up friend accepts right away so you can try comparing.
+      const status = target.id === 'demo-sam' ? 'accepted' : 'pending';
+      db.friendships.push({ requester: uid, addressee: target.id, status });
+      save();
+      return status === 'accepted' ? `You and ${target.display_name} are now friends.` : 'Request sent. They need to accept it.';
+    },
+    async acceptFriend(id) {
+      const f = db.friendships.find((x) => x.requester === id && x.addressee === uid);
+      if (f) { f.status = 'accepted'; save(); }
+    },
+    async removeFriend(id) {
+      db.friendships = db.friendships.filter((f) => !((f.requester === uid && f.addressee === id) || (f.requester === id && f.addressee === uid)));
+      save();
+    },
+  };
+}
+
+function seed() {
+  const s = (title, artist, genre, release_year, score, tags = []) =>
+    ({ song_id: `demo-${title}`, title, artist, album: null, genre, release_year, artwork_url: null, preview_url: null, score, tags, rated_at: new Date().toISOString() });
+  return {
+    session: null,
+    accounts: {},
+    users: { 'demo-sam': { id: 'demo-sam', display_name: 'Sam (practice friend)', friend_code: 'SAM123' } },
+    ratings: {
+      'demo-sam': [
+        s('Take On Me', 'a-ha', 'Pop', 1985, 91, ['Road trip']),
+        s('Africa', 'TOTO', 'Rock', 1982, 95, ['Shower songs']),
+        s('Dreams', 'Fleetwood Mac', 'Rock', 1977, 88, ['Nighttime driving']),
+        s('Mr. Brightside', 'The Killers', 'Alternative', 2004, 84),
+        s('Midnight City', 'M83', 'Electronic', 2011, 90, ['Nighttime driving']),
+        s('September', 'Earth, Wind & Fire', 'R&B/Soul', 1978, 86, ['Cooking songs']),
+        s('Blinding Lights', 'The Weeknd', 'R&B/Soul', 2019, 72),
+        s('Levitating', 'Dua Lipa', 'Pop', 2020, 55),
+      ],
+    },
+    friendships: [],
+  };
+}
+
+// ---------------------------------------------------------------- live (Supabase)
+
+async function supabaseStore() {
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/+esm');
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  let uid = null;
+  const ok = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
+
+  return {
+    async currentUser() {
+      const { data } = await sb.auth.getSession();
+      uid = data.session?.user.id || null;
+      return uid;
+    },
+    async signUp(name, email, password) {
+      const { data, error } = await sb.auth.signUp({
+        email, password,
+        options: { data: { display_name: name.trim() }, emailRedirectTo: location.origin + location.pathname },
+      });
+      if (error) throw error;
+      uid = data.session?.user.id || null;
+      return { needsConfirm: !data.session };
+    },
+    async signIn(email, password) {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      uid = data.user.id;
+    },
+    async signOut() { await sb.auth.signOut(); uid = null; },
+    async me() { return ok(await sb.from('profiles').select('*').eq('id', uid).single()); },
+    async ratingsOf(id) {
+      return ok(await sb.from('ratings').select('*').eq('user_id', id).order('score', { ascending: false }));
+    },
+    async saveRating(r) {
+      ok(await sb.from('ratings').upsert({ ...pick(r), user_id: uid, rated_at: new Date().toISOString() }));
+    },
+    async deleteRating(songId) {
+      ok(await sb.from('ratings').delete().eq('user_id', uid).eq('song_id', songId));
+    },
+    async friends() {
+      const rows = ok(await sb.from('friendships').select('*'));
+      const ids = [...new Set(rows.map((f) => (f.requester === uid ? f.addressee : f.requester)))];
+      const profiles = ids.length ? ok(await sb.from('profiles').select('id, display_name').in('id', ids)) : [];
+      return groupFriends(rows, profiles, uid);
+    },
+    async addFriend(code) { return ok(await sb.rpc('send_friend_request', { code })); },
+    async acceptFriend(id) {
+      ok(await sb.from('friendships').update({ status: 'accepted' }).eq('requester', id).eq('addressee', uid));
+    },
+    async removeFriend(id) {
+      ok(await sb.from('friendships').delete().eq('requester', uid).eq('addressee', id));
+      ok(await sb.from('friendships').delete().eq('requester', id).eq('addressee', uid));
+    },
+  };
+}
