@@ -129,3 +129,40 @@ grant select, update, delete on public.friendships to authenticated;
 revoke all on public.profiles, public.ratings, public.friendships from anon;
 revoke execute on function public.is_connected(uuid), public.are_friends(uuid), public.send_friend_request(text) from public, anon;
 grant execute on function public.is_connected(uuid), public.are_friends(uuid), public.send_friend_request(text) to authenticated;
+
+-- ---------------------------------------------------------------- ranking history (added 2026-11-20)
+-- Every score a person gives a song, with its date, so taste can be seen changing over time.
+create table if not exists public.rating_history (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  song_id text not null,
+  score int not null check (score between 1 and 100),
+  rated_at timestamptz not null default now()
+);
+create index if not exists rating_history_user_song on public.rating_history (user_id, song_id, rated_at);
+alter table public.rating_history enable row level security;
+drop policy if exists "see own history" on public.rating_history;
+create policy "see own history" on public.rating_history for select to authenticated
+  using (user_id = auth.uid());
+grant select on public.rating_history to authenticated;
+revoke all on public.rating_history from anon;
+
+-- Write a history entry automatically whenever a score is new or changed.
+create or replace function public.log_rating() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or new.score is distinct from old.score then
+    insert into rating_history (user_id, song_id, score, rated_at)
+    values (new.user_id, new.song_id, new.score, new.rated_at);
+  end if;
+  return new;
+end $$;
+drop trigger if exists on_rating_saved on public.ratings;
+create trigger on_rating_saved after insert or update on public.ratings
+  for each row execute function public.log_rating();
+revoke execute on function public.log_rating() from public, anon, authenticated;
+
+-- Rankings made before history existed become its first entries.
+insert into public.rating_history (user_id, song_id, score, rated_at)
+select r.user_id, r.song_id, r.score, r.rated_at from public.ratings r
+where not exists (select 1 from public.rating_history h where h.user_id = r.user_id and h.song_id = r.song_id);

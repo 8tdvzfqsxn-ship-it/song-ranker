@@ -33,6 +33,10 @@ browser. Add the friend code **SAM123** to get a practice friend to compare with
    `supabase/functions/song-search/index.ts`, deploy, then in its **Settings** turn
    **Verify JWT with legacy secret** off (the code checks sign-in itself) and save.
 
+5. **"What song is this?"** (optional): deploy `supabase/functions/identify-song/index.ts` the same way
+   (name it `identify-song`, Verify JWT off). Make an account at audd.io, copy its API token, and add it
+   under **Edge Functions → Secrets** as `AUDD_API_TOKEN`. Until then the 🎤 button says it isn't set up.
+
 **2. GitHub (the web address)**
 1. Make a free account at github.com and a new repository called `song-ranker`.
 2. Upload this folder to it (Claude can do this step with you).

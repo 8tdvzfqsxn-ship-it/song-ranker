@@ -77,3 +77,49 @@ export function compare(mine, theirs) {
     youCouldShare: mine.filter((m) => !theirMap.has(songKey(m)) && m.score >= 75).sort((a, b) => b.score - a.score),
   };
 }
+
+// ---------------------------------------------------------------- score tiers ("How to rank")
+// Shared meaning of a score, so everyone ranks the same way. Highest first.
+export const TIERS = [
+  { min: 95, max: 100, name: 'All-time', means: "One of the best songs I've ever heard; never skip, ever" },
+  { min: 90, max: 94, name: 'Essential', means: "A top favorite; I'd put it on any playlist" },
+  { min: 80, max: 89, name: 'Love it', means: 'I seek it out and play it on repeat for a while' },
+  { min: 70, max: 79, name: 'Really like it', means: 'Always glad when it comes on; would add it to a playlist' },
+  { min: 60, max: 69, name: 'Like it', means: "Good song; I don't skip it, but I don't seek it out" },
+  { min: 50, max: 59, name: "It's fine", means: 'Background music; neutral' },
+  { min: 40, max: 49, name: 'Meh', means: "I'd probably skip it" },
+  { min: 20, max: 39, name: 'Not for me', means: 'I skip it every time' },
+  { min: 1, max: 19, name: "Can't stand it", means: "I'd turn it off" },
+];
+export const tierOf = (score) => TIERS.find((t) => score >= t.min) || TIERS.at(-1);
+
+// ---------------------------------------------------------------- ranking history
+export const STALE_DAYS = 180; // nudge to re-rank after about 6 months
+export const daysSince = (iso) => (iso ? (Date.now() - Date.parse(iso)) / 864e5 : 0);
+
+// history: [{ song_id, score, rated_at }] for one person; ratings: their current scores.
+export function historyBySong(history) {
+  const by = new Map();
+  for (const h of [...history].sort((a, b) => a.rated_at.localeCompare(b.rated_at))) {
+    if (!by.has(h.song_id)) by.set(h.song_id, []);
+    by.get(h.song_id).push(h);
+  }
+  return by;
+}
+
+export function tasteOverTime(ratings, history) {
+  const by = historyBySong(history);
+  const changes = [];
+  for (const r of ratings) {
+    const steps = by.get(r.song_id);
+    if (steps && steps.length > 1 && steps[0].score !== r.score) {
+      changes.push({ rating: r, first: steps[0], delta: r.score - steps[0].score });
+    }
+  }
+  changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  const then = ratings.map((r) => {
+    const steps = by.get(r.song_id);
+    return steps ? { ...r, score: steps[0].score } : r;
+  });
+  return { changes, then: tasteStats(then), now: tasteStats(ratings) };
+}

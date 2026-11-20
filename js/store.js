@@ -1,6 +1,7 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=4';
+// Practice mode leaves out the extras that need a server: other catalogs and song recognition.
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=5';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
@@ -31,6 +32,7 @@ function demoStore() {
   let db;
   try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
   if (!db) db = seed();
+  db.history ||= {};
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* private window */ } };
   const code = () => Math.random().toString(16).slice(2, 8).toUpperCase();
   let uid = db.session;
@@ -55,11 +57,14 @@ function demoStore() {
     async signOut() { uid = null; db.session = null; save(); },
     async me() { return db.users[uid]; },
     async ratingsOf(id) { return [...(db.ratings[id] || [])].sort((a, b) => b.score - a.score); },
+    async historyOf() { return [...(db.history[uid] || [])]; },
     async saveRating(r) {
       const list = db.ratings[uid];
-      const row = { ...pick(r), rated_at: new Date().toISOString() };
+      const row = { ...pick(r), rated_at: r.rated_at || new Date().toISOString() };
       const i = list.findIndex((x) => x.song_id === r.song_id);
+      const changed = i < 0 || list[i].score !== row.score;
       if (i >= 0) list[i] = row; else list.push(row);
+      if (changed) (db.history[uid] ||= []).push({ song_id: row.song_id, score: row.score, rated_at: row.rated_at });
       save();
     },
     async deleteRating(songId) { db.ratings[uid] = db.ratings[uid].filter((x) => x.song_id !== songId); save(); },
@@ -110,6 +115,7 @@ function seed() {
         s('Levitating', 'Dua Lipa', 'Pop', 2020, 55),
       ],
     },
+    history: {},
     friendships: [],
   };
 }
@@ -121,6 +127,17 @@ async function supabaseStore() {
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   let uid = null;
   const ok = ({ data, error }) => { if (error) throw new Error(error.message); return data; };
+  // Calls a helper in supabase/functions; turns its error answer into a readable message.
+  const call = async (name, body, headers) => {
+    const { data, error } = await sb.functions.invoke(name, { body, headers });
+    if (error) {
+      let msg = error.message;
+      try { msg = (await error.context.json()).error || msg; } catch { /* keep the generic message */ }
+      throw new Error(msg);
+    }
+    return typeof data === 'string' ? JSON.parse(data) : data;
+  };
+  const moreCache = new Map();
 
   return {
     async currentUser() {
@@ -147,8 +164,12 @@ async function supabaseStore() {
     async ratingsOf(id) {
       return ok(await sb.from('ratings').select('*').eq('user_id', id).order('score', { ascending: false }));
     },
+    async historyOf() {
+      return ok(await sb.from('rating_history').select('song_id, score, rated_at').eq('user_id', uid).order('rated_at'));
+    },
+    // rated_at stays the same when only tags change, so "ranked on" means the last score change.
     async saveRating(r) {
-      ok(await sb.from('ratings').upsert({ ...pick(r), user_id: uid, rated_at: new Date().toISOString() }));
+      ok(await sb.from('ratings').upsert({ ...pick(r), user_id: uid, rated_at: r.rated_at || new Date().toISOString() }));
     },
     async deleteRating(songId) {
       ok(await sb.from('ratings').delete().eq('user_id', uid).eq('song_id', songId));
@@ -160,18 +181,28 @@ async function supabaseStore() {
       return groupFriends(rows, profiles, uid);
     },
     async addFriend(code) { return ok(await sb.rpc('send_friend_request', { code })); },
-    // Backup song search through Supabase (supabase/functions/song-search).
-    async searchBackup(term) {
-      const { data, error } = await sb.functions.invoke('song-search', { body: { term } });
-      if (error) throw new Error(error.message);
-      return typeof data === 'string' ? JSON.parse(data) : data;
-    },
     async acceptFriend(id) {
       ok(await sb.from('friendships').update({ status: 'accepted' }).eq('requester', id).eq('addressee', uid));
     },
     async removeFriend(id) {
       ok(await sb.from('friendships').delete().eq('requester', uid).eq('addressee', id));
       ok(await sb.from('friendships').delete().eq('requester', id).eq('addressee', uid));
+    },
+
+    // Song helpers on Supabase (supabase/functions/song-search and identify-song).
+    // Backup route to Apple's catalog, for devices that block Apple.
+    async searchBackup(term) { return call('song-search', { term }); },
+    // Other catalogs (Deezer, MusicBrainz) for songs Apple doesn't have.
+    async searchMore(term) {
+      const key = term.trim().toLowerCase();
+      if (!moreCache.has(key)) moreCache.set(key, call('song-search', { term, source: 'more' }).then((d) => d.results || []));
+      try { return await moreCache.get(key); } catch (e) { moreCache.delete(key); throw e; }
+    },
+    // Year and genre for a Deezer song, which its search results leave out.
+    async songDetails(album) { return call('song-search', { source: 'details', album }); },
+    // "What song is this?": sends a short recording, gets back { found, title, artist, ... }.
+    async identify(blob) {
+      return call('identify-song', blob, { 'Content-Type': blob.type || 'application/octet-stream' });
     },
   };
 }
