@@ -12,8 +12,7 @@ he names. When an item is built, move it to "Done" with the date.
 **Built 2026-11-20 (v5):**
 - #1 Who's who: initials icons next to every score, a "You · Name" key in Compare.
 - #2 More songs: Deezer (then MusicBrainz) results added under Apple's, plus "Add it yourself".
-- #3 "What song is this?": 🎤 button records 8 seconds and identifies the song. **Needs an AudD account
-  and key before it works** (see README, step 5).
+- #3 "What song is this?": dropped 2026-11-20 to keep the app free; the search window points to Shazam instead.
 - #4 Ranking dates and taste over time: every score is kept with its date, "Ranked on…" on each song,
   a nudge after 6 months, and a "Taste over time" card on My taste.
 - #5 How to rank: guide page, live tier name on the slider, new songs start at 50.

@@ -1,14 +1,13 @@
-import { createStore, isDemo } from './store.js?v=5';
-import { searchSongs } from './itunes.js?v=5';
+import { createStore, isDemo } from './store.js?v=6';
+import { searchSongs } from './itunes.js?v=6';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=5';
+} from './stats.js?v=6';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
   'Jazz', 'Blues', 'Classical', 'Metal', 'Punk', 'Folk', 'Latin', 'Reggae', 'K-Pop', 'Soundtrack', 'Christian & Gospel'];
-const LISTEN_SECONDS = 8;
 const NEW_SONG_SCORE = 50; // the middle, so people move the slider on purpose
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -37,7 +36,6 @@ const state = {
   rating: null,      // { song, score, tags:Set, existing }
   manual: null,      // { title } while adding a song by hand
   guide: false,      // the "How to rank" page is open
-  listen: null,      // { phase, secs, msg } while identifying a song
 };
 
 // ---------------------------------------------------------------- start
@@ -107,7 +105,6 @@ function mainView() {
   return `
     <div class="actions-top">
       <button class="primary big" data-action="open-search">＋ Rank a song</button>
-      <button class="big listen-btn" data-action="listen" title="What song is this?" aria-label="What song is this?">🎤</button>
     </div>
     <p class="center small guide-link"><button class="link" data-action="open-guide">How should I score songs?</button></p>
     <nav class="seg tabs">${tab('library', 'My songs')}${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>
@@ -141,7 +138,7 @@ function libraryView() {
   const f = state.filters;
   const all = state.ratings;
   if (!all.length) {
-    return `<div class="empty">No songs yet. Tap <b>Rank a song</b> and start typing a title, or tap 🎤 to identify what's playing.</div>`;
+    return `<div class="empty">No songs yet. Tap <b>Rank a song</b> and start typing a title.</div>`;
   }
   const uniq = (xs) => [...new Set(xs.filter((x) => x != null && x !== ''))];
   const tags = uniq(all.flatMap((r) => r.tags || [])).sort();
@@ -300,7 +297,6 @@ function compareView() {
 function renderModal() {
   const root = $('#modal-root');
   if (state.guide) root.innerHTML = guideModal();
-  else if (state.listen) root.innerHTML = listenModal();
   else if (state.manual) root.innerHTML = manualModal();
   else if (state.rating) root.innerHTML = rateModal();
   else if (state.search) {
@@ -309,11 +305,11 @@ function renderModal() {
       <div class="overlay" data-action="close-modal-bg">
         <div class="modal" role="dialog" aria-label="Find a song">
           <div class="row"><input id="search-input" type="search" placeholder="Start typing a song title…" autocomplete="off" value="${esc(state.search.term)}">
-          <button class="icon" data-action="listen" title="What song is this?" aria-label="What song is this?">🎤</button>
           <button class="link" data-action="close-modal">Cancel</button></div>
           ${state.search.heard ? `<p class="heard">Heard <b>${esc(state.search.heard)}</b>. Pick the right version:</p>` : ''}
           <ul id="results" class="results"></ul>
           <p class="add-own small muted">Not in the list? <button class="link" data-action="manual-add">Add it yourself</button></p>
+          <p class="shazam-tip tiny muted">Don't know the name? Identify it with Shazam (it's in your iPhone's Control Center), then type it here.</p>
         </div>
       </div>`;
       $('#search-input').focus();
@@ -440,27 +436,6 @@ function manualModal() {
   </div>`;
 }
 
-function listenModal() {
-  const l = state.listen;
-  const body = {
-    asking: `<p>Allow the microphone when your browser asks.</p>`,
-    listening: `<div class="pulse">🎤</div><p><b>Listening…</b> <span id="listen-secs">${l.secs}</span></p><p class="muted small">Hold your phone near the music.</p>`,
-    thinking: `<div class="pulse">🎵</div><p><b>Figuring out the song…</b></p>`,
-    error: `<p class="err">${esc(l.msg)}</p>`,
-  }[l.phase];
-  return `
-  <div class="overlay">
-    <div class="modal listen center" role="dialog" aria-label="What song is this?">
-      <h2>What song is this?</h2>
-      ${body}
-      <div class="row center-row actions">
-        ${l.phase === 'error' ? '<button class="primary" data-action="listen">Try again</button>' : ''}
-        <button data-action="listen-cancel">${l.phase === 'error' ? 'Close' : 'Cancel'}</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 const findMine = (song) => state.ratings.find((r) => r.song_id === song.song_id) || state.ratings.find((r) => songKey(r) === songKey(song));
 
 function openRating(song) {
@@ -530,81 +505,6 @@ function runSearch(term) {
   (store.searchMore ? store.searchMore(term) : Promise.resolve([])).then((r) => { more = r; show(); }, () => {}).finally(finish);
 }
 
-// ---------------------------------------------------------------- "What song is this?"
-
-let listenCtl = null;
-
-function stopRecording(ctl) {
-  if (!ctl) return;
-  clearInterval(ctl.timer);
-  try { if (ctl.rec.state !== 'inactive') ctl.rec.stop(); } catch { /* already stopped */ }
-  ctl.stream.getTracks().forEach((t) => t.stop());
-}
-
-function listenError(msg) {
-  stopRecording(listenCtl);
-  listenCtl = null;
-  state.listen = { phase: 'error', msg };
-  renderModal();
-}
-
-async function startListening() {
-  if (!store.identify) { toast('"What song is this?" works in the live app, not in practice mode.'); return; }
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { toast("This browser can't record audio."); return; }
-  state.search = null; state.rating = null; state.manual = null;
-  state.listen = { phase: 'asking' };
-  renderModal();
-
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch {
-    listenError('Microphone access was blocked. Allow it for this site in your browser settings, then try again.');
-    return;
-  }
-  if (!state.listen) { stream.getTracks().forEach((t) => t.stop()); return; } // cancelled while asking
-
-  const chunks = [];
-  const rec = new MediaRecorder(stream);
-  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-  const stopped = new Promise((resolve) => { rec.onstop = resolve; });
-  const ctl = { rec, stream, timer: null, cancelled: false };
-  listenCtl = ctl;
-  rec.start();
-  state.listen = { phase: 'listening', secs: LISTEN_SECONDS };
-  renderModal();
-
-  await new Promise((resolve) => {
-    ctl.timer = setInterval(() => {
-      if (ctl.cancelled || !state.listen) return resolve();
-      state.listen.secs -= 1;
-      const el = $('#listen-secs');
-      if (el) el.textContent = state.listen.secs;
-      if (state.listen.secs <= 0) resolve();
-    }, 1000);
-  });
-  stopRecording(ctl);
-  await stopped;
-  if (listenCtl === ctl) listenCtl = null;
-  if (ctl.cancelled || !state.listen) return;
-
-  state.listen = { phase: 'thinking' };
-  renderModal();
-  try {
-    const r = await store.identify(new Blob(chunks, { type: rec.mimeType || 'audio/mp4' }));
-    if (!state.listen) return;
-    if (!r.found) { listenError("Couldn't recognize that one. Try again closer to the speaker, during a part with singing."); return; }
-    state.listen = null;
-    openSearch(`${r.title} ${r.artist}`, `${r.title} — ${r.artist}`);
-  } catch (e) {
-    if (state.listen) listenError(e.message);
-  }
-}
-
-function cancelListening() {
-  if (listenCtl) { listenCtl.cancelled = true; stopRecording(listenCtl); }
-  state.listen = null;
-  renderModal();
-}
-
 // ---------------------------------------------------------------- audio preview
 
 const audio = new Audio();
@@ -665,8 +565,6 @@ document.addEventListener('click', (e) => {
     case 'close-guide': case 'close-guide-bg': state.guide = false; renderModal(); break;
     case 'manual-add': state.manual = { title: state.search?.term || '' }; state.search = null; renderModal(); break;
     case 'manual-back': { const term = state.manual?.title || ''; state.manual = null; openSearch(term); break; }
-    case 'listen': startListening(); break;
-    case 'listen-cancel': cancelListening(); break;
     case 'toggle-stale': state.filters.stale = !state.filters.stale; render(); break;
     case 'toggle-tag': {
       const t = el.dataset.tag;
@@ -741,7 +639,6 @@ document.addEventListener('input', (e) => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (state.guide) { state.guide = false; renderModal(); return; }
-    if (state.listen) { cancelListening(); return; }
     if (state.search || state.rating || state.manual) { closeModals(); return; }
   }
   if (e.target.id !== 'search-input' || !state.search) return;

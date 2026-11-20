@@ -153,7 +153,6 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--accent); height: 
 .actions-top { display: flex; gap: 8px; margin: 8px 0 4px; }
 .actions-top .big { margin: 0; }
 .actions-top .primary.big { flex: 1; width: auto; }
-.listen-btn { flex: 0 0 64px; width: 64px; padding: 0; font-size: 1.4rem; }
 .guide-link { margin: 4px 0 10px; }
 .tiny { font-size: .72rem; margin-top: 2px; }
 .stale { color: var(--danger); }
@@ -176,7 +175,4 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--accent); height: 
 .add-own { margin: 10px 0 0; text-align: center; }
 label.grow { flex: 1; }
 .center-row { justify-content: center; }
-.listen p { margin: 8px 0; }
-.pulse { font-size: 3rem; margin: 10px auto; animation: pulse 1.2s ease-in-out infinite; }
-@keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: .7; } }
-@media (prefers-reduced-motion: reduce) { .pulse { animation: none; } }
+.shazam-tip { text-align: center; margin: 6px 0 0; }

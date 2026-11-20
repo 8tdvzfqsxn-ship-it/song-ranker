@@ -1,7 +1,7 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
-// Practice mode leaves out the extras that need a server: other catalogs and song recognition.
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=5';
+// Practice mode leaves out the extras that need a server, like the other catalogs.
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=6';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
@@ -189,7 +189,7 @@ async function supabaseStore() {
       ok(await sb.from('friendships').delete().eq('requester', id).eq('addressee', uid));
     },
 
-    // Song helpers on Supabase (supabase/functions/song-search and identify-song).
+    // Song helpers on Supabase (supabase/functions/song-search).
     // Backup route to Apple's catalog, for devices that block Apple.
     async searchBackup(term) { return call('song-search', { term }); },
     // Other catalogs (Deezer, MusicBrainz) for songs Apple doesn't have.
@@ -200,9 +200,5 @@ async function supabaseStore() {
     },
     // Year and genre for a Deezer song, which its search results leave out.
     async songDetails(album) { return call('song-search', { source: 'details', album }); },
-    // "What song is this?": sends a short recording, gets back { found, title, artist, ... }.
-    async identify(blob) {
-      return call('identify-song', blob, { 'Content-Type': blob.type || 'application/octet-stream' });
-    },
   };
 }
