@@ -28,6 +28,11 @@ browser. Add the friend code **SAM123** to get a practice friend to compare with
 3. Open **Project Settings → API**. Copy the **Project URL** and the **anon public** key into
    `config.js`. (Never copy the `service_role` key anywhere.)
 
+4. **Backup song search** (for phones or networks that block Apple's catalog): open
+   **Edge Functions → Deploy a new function → Via Editor**, name it `song-search`, paste
+   `supabase/functions/song-search/index.ts`, deploy, then in its **Settings** turn
+   **Verify JWT with legacy secret** off (the code checks sign-in itself) and save.
+
 **2. GitHub (the web address)**
 1. Make a free account at github.com and a new repository called `song-ranker`.
 2. Upload this folder to it (Claude can do this step with you).
