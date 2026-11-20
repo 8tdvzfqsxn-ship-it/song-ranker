@@ -1,9 +1,9 @@
-import { createStore, isDemo } from './store.js?v=6';
-import { searchSongs } from './itunes.js?v=6';
+import { createStore, isDemo } from './store.js?v=7';
+import { searchSongs } from './itunes.js?v=7';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=6';
+} from './stats.js?v=7';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',

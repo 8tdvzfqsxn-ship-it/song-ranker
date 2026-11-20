@@ -1,4 +1,4 @@
-# 🎵 Song Ranker
+# Song Ranker
 
 Rank songs from 1 to 100, tag them for moments (nighttime driving, shower songs, cooking),
 see which decade and genre you love most, and link with friends to compare and find new music.
