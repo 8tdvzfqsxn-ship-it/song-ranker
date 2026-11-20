@@ -344,7 +344,7 @@ function onSearchInput(term) {
   searchTimer = setTimeout(async () => {
     const seq = ++searchSeq;
     try {
-      const results = await searchSongs(term.trim());
+      const results = await searchSongs(term.trim(), 8, store.searchBackup);
       if (seq !== searchSeq || !state.search) return; // a newer search is on its way
       state.search.results = results;
     } catch (e) {

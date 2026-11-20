@@ -5,19 +5,30 @@
 const cache = new Map();
 let counter = 0;
 
-export async function searchSongs(term, limit = 8) {
+// Once Apple is unreachable from this device, use the backup for the rest of the visit.
+let directBlocked = false;
+
+// backup: optional function(term) that asks Apple through Supabase, for phones or
+// networks that block Apple's catalog.
+export async function searchSongs(term, limit = 8, backup = null) {
   const key = term.trim().toLowerCase();
   if (cache.has(key)) return cache.get(key);
   const params = new URLSearchParams({ term, entity: 'song', media: 'music', limit: String(limit + 6) });
   const url = `https://itunes.apple.com/search?${params}`;
 
-  let data;
-  try {
-    data = await fetchJson(url);
-  } catch (e) {
-    if (e.rateLimited) throw e;
-    data = await jsonp(url); // backup path
+  let data = null;
+  if (!directBlocked) {
+    try {
+      data = await fetchJson(url);
+    } catch (e) {
+      if (e.rateLimited) throw e;
+      directBlocked = true;
+    }
   }
+  if (!data && backup) {
+    try { data = await backup(term); } catch { /* fall through to the last resort */ }
+  }
+  if (!data) data = await jsonp(url); // last resort
   const songs = dedupe((data.results || []).filter((r) => r.trackId).map(toSong)).slice(0, limit);
   cache.set(key, songs);
   return songs;

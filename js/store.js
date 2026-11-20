@@ -160,6 +160,12 @@ async function supabaseStore() {
       return groupFriends(rows, profiles, uid);
     },
     async addFriend(code) { return ok(await sb.rpc('send_friend_request', { code })); },
+    // Backup song search through Supabase (supabase/functions/song-search).
+    async searchBackup(term) {
+      const { data, error } = await sb.functions.invoke('song-search', { body: { term } });
+      if (error) throw new Error(error.message);
+      return typeof data === 'string' ? JSON.parse(data) : data;
+    },
     async acceptFriend(id) {
       ok(await sb.from('friendships').update({ status: 'accepted' }).eq('requester', id).eq('addressee', uid));
     },
