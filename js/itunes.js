@@ -17,18 +17,23 @@ export async function searchSongs(term, limit = 8, backup = null) {
   const url = `https://itunes.apple.com/search?${params}`;
 
   let data = null;
+  const tried = []; // what failed, shown in the error so problems can be diagnosed
   if (!directBlocked) {
     try {
       data = await fetchJson(url);
     } catch (e) {
       if (e.rateLimited) throw e;
       directBlocked = true;
+      tried.push(`Apple: ${e.message}`);
     }
   }
   if (!data && backup) {
-    try { data = await backup(term); } catch { /* fall through to the last resort */ }
+    try { data = await backup(term); } catch (e) { tried.push(`backup: ${e.message}`); }
   }
-  if (!data) data = await jsonp(url); // last resort
+  if (!data) {
+    try { data = await jsonp(url); } // last resort
+    catch (e) { throw new Error(`Couldn't search right now. (${[...tried, 'old way: blocked'].join(' · ')})`); }
+  }
   const songs = dedupe((data.results || []).filter((r) => r.trackId).map(toSong)).slice(0, limit);
   cache.set(key, songs);
   return songs;

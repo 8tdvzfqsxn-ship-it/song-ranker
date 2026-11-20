@@ -136,3 +136,4 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--accent); height: 
 
 #toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; opacity: 0; transition: .2s; pointer-events: none; z-index: 20; max-width: calc(100% - 32px); }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+.version { text-align: center; color: var(--muted); font-size: .7rem; margin: 0 0 16px; }

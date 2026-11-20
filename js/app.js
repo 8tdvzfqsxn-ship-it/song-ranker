@@ -1,6 +1,6 @@
-import { createStore, isDemo } from './store.js';
-import { searchSongs } from './itunes.js';
-import { tasteStats, compare, songKey, decadeOf, decadeLabel } from './stats.js';
+import { createStore, isDemo } from './store.js?v=4';
+import { searchSongs } from './itunes.js?v=4';
+import { tasteStats, compare, songKey, decadeOf, decadeLabel } from './stats.js?v=4';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 
