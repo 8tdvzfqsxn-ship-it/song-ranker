@@ -353,7 +353,7 @@ function onSearchInput(term) {
     }
     state.search.loading = false;
     renderResults();
-  }, 250);
+  }, 400); // wait for a pause in typing, so fewer searches count against Apple's limit
 }
 
 // ---------------------------------------------------------------- audio preview
