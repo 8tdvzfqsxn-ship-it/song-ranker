@@ -198,6 +198,13 @@ label.grow { flex: 1; }
   body:has(.cols) .cols { flex: 1; min-height: 0; }
   body:has(.cols) .col { height: 100%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 4px 24px; }
   body:has(.cols) .version { flex: none; margin: 4px 0 calc(6px + env(safe-area-inset-bottom)); }
+
+  /* v10: one top row on wide screens: logo, Rank button, profile */
+  body:has(.cols) .top { display: none; }
+  .wide-top { display: grid; grid-template-columns: 1fr minmax(260px, 420px) 1fr; align-items: center; gap: 16px; padding: 14px 0 12px; flex: none; }
+  .wide-rank { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .wide-rank .big { margin: 0; padding: 12px; }
+  .who-wide { display: flex; align-items: center; gap: 6px; justify-content: flex-end; white-space: nowrap; }
 }
 @media (min-width: 1180px) { .banner { margin: 4px auto 8px; } }
 /* Notches, rounded corners and the fold area when opened full screen */

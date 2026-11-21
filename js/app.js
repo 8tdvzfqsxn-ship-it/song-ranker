@@ -1,9 +1,9 @@
-import { createStore, isDemo } from './store.js?v=9';
-import { searchSongs } from './itunes.js?v=9';
+import { createStore, isDemo } from './store.js?v=10';
+import { searchSongs } from './itunes.js?v=10';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=9';
+} from './stats.js?v=10';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -67,9 +67,7 @@ async function loadAll() {
 // ---------------------------------------------------------------- rendering
 
 function render() {
-  $('#who').innerHTML = state.uid
-    ? `${avatar(state.me, 'sm')}<span class="muted small">${esc(state.me?.display_name)}</span> <button class="link" data-action="sign-out">Sign out</button>`
-    : '';
+  $('#who').innerHTML = state.uid ? whoHtml() : '';
   // On wide screens each column scrolls by itself; keep each one's place across redraws
   // (a column starts at the top only when it switches to a different panel).
   const kept = new Map([...document.querySelectorAll('.col[data-key]')].map((c) => [c.dataset.key, c.scrollTop]));
@@ -99,6 +97,9 @@ function authView() {
   </section>`;
 }
 
+const whoHtml = () =>
+  `${avatar(state.me, 'sm')}<span class="muted small">${esc(state.me?.display_name)}</span> <button class="link" data-action="sign-out">Sign out</button>`;
+
 // Wide screens (an unfolded iPhone Duo, a tablet, a computer) show two columns:
 // My songs on the left, My taste or Friends on the right. Folding switches back.
 const wideScreen = matchMedia('(min-width: 700px)');
@@ -116,7 +117,16 @@ function mainView() {
     </div>
     <p class="center small guide-link"><button class="link" data-action="open-guide">How should I score songs?</button></p>`;
   if (wide) {
-    return `${top}
+    // One top row: logo, Rank button and profile (the usual header is hidden).
+    return `
+    <div class="wide-top">
+      <div class="brand"><img class="logo" src="img/logo.svg?v=10" alt="">Song Ranker</div>
+      <div class="wide-rank">
+        <button class="primary big" data-action="open-search">＋ Rank a song</button>
+        <button class="link small" data-action="open-guide">How should I score songs?</button>
+      </div>
+      <div class="who-wide">${whoHtml()}</div>
+    </div>
     <div class="cols">
       <div class="col" data-key="songs"><h2 class="col-title">My songs</h2>${libraryView()}</div>
       <div class="col side" data-key="${shown}:${esc(state.comparing?.friend.id || '')}"><nav class="seg tabs">${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>${panel(shown)}</div>
