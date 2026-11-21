@@ -177,3 +177,20 @@ input[type=range] { padding: 0; border: 0; accent-color: var(--accent); height: 
 label.grow { flex: 1; }
 .center-row { justify-content: center; }
 .shazam-tip { text-align: center; margin: 6px 0 0; }
+
+/* v8: two columns on wide screens (an unfolded iPhone Duo, tablets, computers) */
+@media (min-width: 700px) {
+  main, .top { max-width: 1180px; }
+  main { padding-left: 24px; padding-right: 24px; }
+  .top { padding-left: 24px; padding-right: 24px; }
+  .banner { max-width: 1132px; margin: 4px 24px 8px; }
+  .actions-top, .guide-link { max-width: 520px; margin-left: auto; margin-right: auto; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .col-title { font-size: 1rem; margin: 6px 0 12px; }
+  .col.side { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; padding-bottom: 8px; }
+  .cols .filters { grid-template-columns: repeat(2, 1fr); }
+  .cols .filters input { grid-column: 1 / -1; }
+}
+@media (min-width: 1180px) { .banner { margin: 4px auto 8px; } }
+/* Notches, rounded corners and the fold area when opened full screen */
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }

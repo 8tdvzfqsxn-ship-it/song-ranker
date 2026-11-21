@@ -1,9 +1,9 @@
-import { createStore, isDemo } from './store.js?v=7';
-import { searchSongs } from './itunes.js?v=7';
+import { createStore, isDemo } from './store.js?v=8';
+import { searchSongs } from './itunes.js?v=8';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=7';
+} from './stats.js?v=8';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -95,20 +95,32 @@ function authView() {
   </section>`;
 }
 
+// Wide screens (an unfolded iPhone Duo, a tablet, a computer) show two columns:
+// My songs on the left, My taste or Friends on the right. Folding switches back.
+const wideScreen = matchMedia('(min-width: 700px)');
+wideScreen.addEventListener('change', () => { if (state.uid) render(); });
+
 function mainView() {
-  const tab = (id, label) => `<button class="${state.view === id ? 'on' : ''}" data-action="view" data-view="${id}">${label}</button>`;
+  const wide = wideScreen.matches;
+  const shown = wide && state.view === 'library' ? 'taste' : state.view;
+  const tab = (id, label) => `<button class="${shown === id ? 'on' : ''}" data-action="view" data-view="${id}">${label}</button>`;
   const badge = state.friends.incoming.length ? ` <span class="dot">${state.friends.incoming.length}</span>` : '';
-  let body = '';
-  if (state.view === 'library') body = libraryView();
-  else if (state.view === 'taste') body = tasteView();
-  else body = state.comparing ? compareView() : friendsView();
-  return `
+  const panel = (v) => v === 'library' ? libraryView() : v === 'taste' ? tasteView() : state.comparing ? compareView() : friendsView();
+  const top = `
     <div class="actions-top">
       <button class="primary big" data-action="open-search">＋ Rank a song</button>
     </div>
-    <p class="center small guide-link"><button class="link" data-action="open-guide">How should I score songs?</button></p>
+    <p class="center small guide-link"><button class="link" data-action="open-guide">How should I score songs?</button></p>`;
+  if (wide) {
+    return `${top}
+    <div class="cols">
+      <div class="col"><h2 class="col-title">My songs</h2>${libraryView()}</div>
+      <div class="col side"><nav class="seg tabs">${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>${panel(shown)}</div>
+    </div>`;
+  }
+  return `${top}
     <nav class="seg tabs">${tab('library', 'My songs')}${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>
-    ${body}`;
+    ${panel(state.view)}`;
 }
 
 function songRow(r, { right = '', clickable = true, showDate = false } = {}) {
