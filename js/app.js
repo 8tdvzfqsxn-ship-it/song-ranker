@@ -1,9 +1,9 @@
-import { createStore, isDemo } from './store.js?v=8';
-import { searchSongs } from './itunes.js?v=8';
+import { createStore, isDemo } from './store.js?v=9';
+import { searchSongs } from './itunes.js?v=9';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=8';
+} from './stats.js?v=9';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -70,7 +70,11 @@ function render() {
   $('#who').innerHTML = state.uid
     ? `${avatar(state.me, 'sm')}<span class="muted small">${esc(state.me?.display_name)}</span> <button class="link" data-action="sign-out">Sign out</button>`
     : '';
+  // On wide screens each column scrolls by itself; keep each one's place across redraws
+  // (a column starts at the top only when it switches to a different panel).
+  const kept = new Map([...document.querySelectorAll('.col[data-key]')].map((c) => [c.dataset.key, c.scrollTop]));
   $('#app').innerHTML = state.uid ? mainView() : authView();
+  document.querySelectorAll('.col[data-key]').forEach((c) => { if (kept.has(c.dataset.key)) c.scrollTop = kept.get(c.dataset.key); });
   renderModal();
 }
 
@@ -114,8 +118,8 @@ function mainView() {
   if (wide) {
     return `${top}
     <div class="cols">
-      <div class="col"><h2 class="col-title">My songs</h2>${libraryView()}</div>
-      <div class="col side"><nav class="seg tabs">${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>${panel(shown)}</div>
+      <div class="col" data-key="songs"><h2 class="col-title">My songs</h2>${libraryView()}</div>
+      <div class="col side" data-key="${shown}:${esc(state.comparing?.friend.id || '')}"><nav class="seg tabs">${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>${panel(shown)}</div>
     </div>`;
   }
   return `${top}
@@ -644,7 +648,7 @@ document.addEventListener('input', (e) => {
     state.filters[t.dataset.filter] = t.value;
     const pos = t.selectionStart;
     render();
-    if (t.dataset.filter === 'q') { const el = $('[data-filter="q"]'); el.focus(); el.setSelectionRange(pos, pos); }
+    if (t.dataset.filter === 'q') { const el = $('[data-filter="q"]'); el.focus({ preventScroll: true }); el.setSelectionRange(pos, pos); }
   }
 });
 

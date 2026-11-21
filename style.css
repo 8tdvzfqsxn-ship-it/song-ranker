@@ -185,11 +185,19 @@ label.grow { flex: 1; }
   .top { padding-left: 24px; padding-right: 24px; }
   .banner { max-width: 1132px; margin: 4px 24px 8px; }
   .actions-top, .guide-link { max-width: 520px; margin-left: auto; margin-right: auto; }
-  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
   .col-title { font-size: 1rem; margin: 6px 0 12px; }
-  .col.side { position: sticky; top: 8px; max-height: calc(100vh - 16px); overflow-y: auto; padding-bottom: 8px; }
   .cols .filters { grid-template-columns: repeat(2, 1fr); }
   .cols .filters input { grid-column: 1 / -1; }
+
+  /* v9: the page itself stays put and each column scrolls on its own, so you can
+     scroll both sides at the same time with two fingers. */
+  body:has(.cols) { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  body:has(.cols) .top, body:has(.cols) main { width: 100%; flex: none; }
+  body:has(.cols) main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 0; }
+  body:has(.cols) .cols { flex: 1; min-height: 0; }
+  body:has(.cols) .col { height: 100%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0 4px 24px; }
+  body:has(.cols) .version { flex: none; margin: 4px 0 calc(6px + env(safe-area-inset-bottom)); }
 }
 @media (min-width: 1180px) { .banner { margin: 4px auto 8px; } }
 /* Notches, rounded corners and the fold area when opened full screen */
