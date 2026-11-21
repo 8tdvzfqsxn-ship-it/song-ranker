@@ -1,9 +1,9 @@
-import { createStore, isDemo } from './store.js?v=11';
-import { searchSongs } from './itunes.js?v=11';
+import { createStore, isDemo } from './store.js?v=12';
+import { searchSongs } from './itunes.js?v=12';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=11';
+} from './stats.js?v=12';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -97,8 +97,19 @@ function authView() {
   </section>`;
 }
 
-const whoHtml = () =>
-  `${avatar(state.me, 'sm')}<span class="muted small">${esc(state.me?.display_name)}</span> <button class="link" data-action="sign-out">Sign out</button>`;
+// The profile corner: just the initials circle; tapping it opens a small menu.
+const whoHtml = () => `
+  <div class="profile">
+    <button class="profile-btn" data-action="toggle-profile" aria-haspopup="true" aria-label="Your account">${avatar(state.me)}</button>
+    <div class="profile-menu" role="menu">
+      <div class="pm-name">${esc(state.me?.display_name)}</div>
+      <div class="muted small">Friend code <b>${esc(state.me?.friend_code)}</b></div>
+      <button class="link danger-link" data-action="sign-out" role="menuitem">Sign out</button>
+    </div>
+  </div>`;
+const closeProfileMenus = () => document.querySelectorAll('.profile.open').forEach((p) => p.classList.remove('open'));
+// Tapping anywhere outside the menu closes it.
+document.addEventListener('click', (e) => { if (!e.target.closest('.profile')) closeProfileMenus(); }, true);
 
 // Wide screens (an unfolded iPhone Duo, a tablet, a computer) show two columns:
 // My songs on the left, My taste or Friends on the right. Folding switches back.
@@ -120,7 +131,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=11" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=12" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -576,6 +587,13 @@ document.addEventListener('click', (e) => {
 
   switch (a) {
     case 'auth-mode': state.authMode = el.dataset.mode; render(); break;
+    case 'toggle-profile': {
+      const p = el.closest('.profile');
+      const open = !p.classList.contains('open');
+      closeProfileMenus();
+      p.classList.toggle('open', open);
+      break;
+    }
     case 'sign-out': act(async () => {
       await store.signOut();
       Object.assign(state, { uid: null, me: null, ratings: [], history: [], comparing: null, view: 'library' });
@@ -664,6 +682,7 @@ document.addEventListener('input', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
+    if (document.querySelector('.profile.open')) { closeProfileMenus(); return; }
     if (state.guide) { state.guide = false; renderModal(); return; }
     if (state.search || state.rating || state.manual) { closeModals(); return; }
   }
