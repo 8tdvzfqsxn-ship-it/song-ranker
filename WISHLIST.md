@@ -5,7 +5,40 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Waiting
 
-*(none right now)*
+### 6. Share my friend code easily
+*Asked 2026-11-21.* Copy my code and send it to others.
+- **Today:** Friends → "Copy invite" copies a link plus the code; the code also shows in the profile menu.
+- **Idea:** a **Share** button that opens the phone's share sheet (Messages, etc.) with the invite ready,
+  and a tap-to-copy on the code in the profile menu. Free.
+
+### 7. Invite people so they make their own login
+*Asked 2026-11-21.*
+- **Idea:** a personal invite link (the app's address plus my code). A friend opens it, creates their own
+  account, and the friend request to me is sent automatically. No typing codes. Free.
+
+### 8. Bring in my music library as an "Unranked" list (the big one)
+*Asked 2026-11-21.* Export the songs from my music app into Song Ranker, where they wait in an
+"Unranked songs" queue, so it's easy to rank all my music.
+- **In the app:** a new Unranked list, with "rank next", skip and remove; ranking a song moves it out.
+- **Ways to bring songs in, all free:**
+  - **Upload a file or paste a list** (works for every music app). Apple Music on a Mac can export a
+    playlist as a text file; YouTube Music's library comes from Google Takeout; free transfer sites
+    (like TuneMyMusic) can export any service as a spreadsheet file.
+  - **Connect Spotify** directly. Its developer access is free, but apps in its free mode only work for a
+    small number of people you add by hand.
+  - **Apple Music on iPhone** through an Apple Shortcut that collects the library and sends it to the app.
+  - **Not free:** a direct Apple Music connection inside the app needs Apple's developer membership
+    ($99/year). YouTube Music has no official way to read your library.
+- **To decide:** which music app(s) to support first.
+
+### 9. Make playlists from my rankings and send them to my music app
+*Asked 2026-11-21.* Song Ranker builds playlists from my rankings (for example "My 90+ songs",
+"Nighttime driving", "Best of the 80s") and exports them to my streaming app.
+- **Free ways:** create the playlist directly in **Spotify** (same free-mode limit as above); an
+  **Apple Shortcut** that searches Apple Music and adds the songs to a new playlist; or a downloadable
+  list for a free transfer site to load into any service.
+- **Not free:** creating Apple Music playlists from inside the app ($99/year developer membership).
+- **Depends on:** #8's choice of music app.
 
 ## Done
 
