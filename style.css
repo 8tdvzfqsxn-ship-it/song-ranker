@@ -288,3 +288,12 @@ button[disabled] { opacity: .5; cursor: default; }
   .song.fy .un-btns { width: 100%; padding-left: 58px; }
   .song.fy .un-btns .primary { flex: 1; }
 }
+
+/* v16: the iPhone Duo's front screen puts its clock, battery and Wi-Fi in a tall pill down the top-right
+   corner. On phone-width screens, windows keep a clear strip there: the header row, song and Play preview
+   button sit to the left of it, and text flows around it. */
+@media (max-width: 699px) {
+  .overlay { --ov-top: max(24px, calc(env(safe-area-inset-top) + 12px)); padding-top: var(--ov-top); }
+  .play-btn { width: calc(100% - 60px); }
+  .modal::before { content: ""; float: right; width: 52px; height: calc(170px - var(--ov-top)); margin: -16px -10px 0 8px; }
+}

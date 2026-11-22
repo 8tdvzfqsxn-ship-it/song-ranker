@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=15';
-import { searchSongs } from './itunes.js?v=15';
+import { createStore, isDemo } from './store.js?v=16';
+import { searchSongs } from './itunes.js?v=16';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=15';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=15';
-import { buildForYou, freshPreviews } from './recommend.js?v=15';
+} from './stats.js?v=16';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=16';
+import { buildForYou, freshPreviews } from './recommend.js?v=16';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -175,7 +175,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=15" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=16" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
