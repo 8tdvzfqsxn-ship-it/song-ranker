@@ -45,8 +45,8 @@ so the "confirm your email" links point back to the app.
 
 ## Inviting friends
 
-Open **Friends → Copy invite** and text the invite to a friend. They make an account at the same web
-address and type your code. You accept their request, and then **Compare** shows:
+Open **Friends → Share invite** and send it to a friend. When they open the link and make an account,
+the friend request comes to you automatically (they can also type your code). You accept their request, and then **Compare** shows:
 - how often you agree on songs you've both ranked,
 - **Discover:** songs they love that you haven't ranked, with a preview to play,
 - your favorites they haven't ranked yet.
@@ -58,6 +58,13 @@ the free site exportify.net, Apple Music on a Mac (File → Library → Export P
 Google Takeout (`music library songs.csv`), or any app through a free transfer site like TuneMyMusic.
 Songs wait in the Unranked list; **Rank** finds each one in the catalog when you get to it.
 
+## Finding new music
+
+**My taste → Playlists → For you** suggests new songs similar to the ones you score 80 and up, using
+Deezer's free catalog (artists related to your favorites, and their top songs). Every playlist, including
+For you, can be downloaded as a file; the free site TuneMyMusic turns it into a YouTube Music (or any app)
+playlist.
+
 ## Files
 
 | File | What it does |
@@ -67,6 +74,7 @@ Songs wait in the Unranked list; **Rank** finds each one in the catalog when you
 | `js/itunes.js` | Song search |
 | `js/stats.js` | Favorite decade/genre math and friend comparisons |
 | `js/importer.js` | Reads pasted lists and music-app files for the Unranked list |
+| `js/recommend.js` | "For you" suggestions from Deezer's free catalog |
 | `js/store.js` | Saving: practice mode or Supabase |
 | `supabase/setup.sql` | Database tables and who-can-see-what rules |
 | `config.js` | Your Supabase address and public key |

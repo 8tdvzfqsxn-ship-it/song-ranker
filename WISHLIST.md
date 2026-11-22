@@ -5,27 +5,22 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Waiting
 
-### 6. Share my friend code easily
-*Asked 2026-11-21.* Copy my code and send it to others.
-- **Today:** Friends → "Copy invite" copies a link plus the code; the code also shows in the profile menu.
-- **Idea:** a **Share** button that opens the phone's share sheet (Messages, etc.) with the invite ready,
-  and a tap-to-copy on the code in the profile menu. Free.
-
-### 7. Invite people so they make their own login
-*Asked 2026-11-21.*
-- **Idea:** a personal invite link (the app's address plus my code). A friend opens it, creates their own
-  account, and the friend request to me is sent automatically. No typing codes. Free.
-
-### 9. Make playlists from my rankings and send them to my music app
-*Asked 2026-11-21.* Song Ranker builds playlists from my rankings (for example "My 90+ songs",
-"Nighttime driving", "Best of the 80s") and exports them to my streaming app.
-- **Free ways:** create the playlist directly in **Spotify** (same free-mode limit as above); an
-  **Apple Shortcut** that searches Apple Music and adds the songs to a new playlist; or a downloadable
-  list for a free transfer site to load into any service.
-- **Not free:** creating Apple Music playlists from inside the app ($99/year developer membership).
-- **Depends on:** #8 (built 2026-11-22). Josh listens on YouTube Music.
+*Nothing waiting right now.*
 
 ## Done
+
+**Built 2026-11-22 (v14):**
+- #6 Share my friend code: **Share invite** opens the phone's share sheet; the code in the profile menu copies with a tap.
+- #7 Invite links: the invite is a link with the friend code in it. A friend who opens it and makes an account
+  (or signs in) sends the friend request automatically, even after confirming their email.
+- #9 Playlists from my rankings: My taste → **Playlists** (90+, 80+, each moment tag, best of each decade, top
+  of each genre). Each one can be downloaded as a file, copied, or shared; the free site TuneMyMusic turns the
+  file into a YouTube Music (or any app) playlist. Direct Spotify/Apple playlist creation not built (limits/cost).
+- #10 Preview button: now a full-width "▶ Play preview" under the song, away from the Duo's clock and icons.
+- #11 For you: new songs from artists related to the ones behind your 80+ songs (Deezer, no account), scored by
+  how many favorites point to them, with previews and Rank / Save for later / Not for me. Your scores and
+  "Not for me" steer the next set. "Not for me" is remembered on that device only. Last.fm (free key) can be
+  added later for better matches.
 
 **Built 2026-11-22 (v13):**
 - #8 Music library to an "Unranked" list: **Unranked** tab with Rank the next one / Rank / Skip / Remove,
@@ -46,6 +41,52 @@ he names. When an item is built, move it to "Done" with the date.
 - #5 How to rank: guide page, live tier name on the slider, new songs start at 50.
 
 <details><summary>The original requests</summary>
+### 6. Share my friend code easily
+*Asked 2026-11-21.* Copy my code and send it to others.
+- **Today:** Friends → "Copy invite" copies a link plus the code; the code also shows in the profile menu.
+- **Idea:** a **Share** button that opens the phone's share sheet (Messages, etc.) with the invite ready,
+  and a tap-to-copy on the code in the profile menu. Free.
+
+### 7. Invite people so they make their own login
+*Asked 2026-11-21.*
+- **Idea:** a personal invite link (the app's address plus my code). A friend opens it, creates their own
+  account, and the friend request to me is sent automatically. No typing codes. Free.
+
+### 9. Make playlists from my rankings and send them to my music app
+*Asked 2026-11-21.* Song Ranker builds playlists from my rankings (for example "My 90+ songs",
+"Nighttime driving", "Best of the 80s") and exports them to my streaming app.
+- **Free ways:** create the playlist directly in **Spotify** (same free-mode limit as above); an
+  **Apple Shortcut** that searches Apple Music and adds the songs to a new playlist; or a downloadable
+  list for a free transfer site to load into any service.
+- **Not free:** creating Apple Music playlists from inside the app ($99/year developer membership).
+- **Depends on:** #8 (built 2026-11-22). Josh listens on YouTube Music.
+
+### 10. Preview button hidden on the Duo's front screen
+*Asked 2026-11-22.* In the rating window, the ▶ preview button sits in the top-right corner, where the
+phone's clock and Wi-Fi icons cover it on the iPhone Duo's front (folded) screen, so it can't be tapped.
+- **Idea:** move the play button out of that corner (for example a "▶ Play preview" button under the song
+  name), and start the window a little lower so nothing sits under the clock and icons. Free.
+
+### 11. "For you" playlists: real recommendations from the songs I love (one of the main reasons for the app)
+*Asked 2026-11-22.* The app learns which songs a person really loves and builds a playlist of new songs that
+are actually similar to their favorites, because the music apps' recommendations are bad.
+- **How it could work (free):**
+  1. **Seeds:** your 80+ songs, with the highest and most recent scores counting most.
+  2. **Find similar songs** for each seed from free music databases:
+     - **Deezer** (no account needed, already used for search): artists related to yours, and their top songs.
+     - **Last.fm** (free account and key, which Josh would set up himself): "similar tracks", based on
+       what millions of listeners play together. Likely the best quality.
+     - Spotify and Apple Music can't be used: Spotify turned off recommendations for new apps, and Apple
+       needs the $99/year membership.
+  3. **Score the candidates:** a song suggested by several of your favorites ranks higher. Leave out songs
+     you've already ranked or have waiting, artists you score low, and too many songs by one artist.
+  4. **Show a "For you" playlist** with 30-second previews and Rank / Not for me buttons. What you rank
+     teaches it: low scores push that direction down, high scores become new seeds.
+  5. **Later:** mood playlists from your tags ("Nighttime driving" picks), friends' favorites mixed in, and
+     sending the playlist to YouTube Music or other apps (#9).
+- **To decide:** start with Deezer only (nothing to set up), or set up a free Last.fm key from the start.
+- **Depends on:** enough 80+ songs to learn from; #8's Unranked list helps get there.
+
 ### 8. Bring in my music library as an "Unranked" list (the big one)
 *Asked 2026-11-21.* Export the songs from my music app into Song Ranker, where they wait in an
 "Unranked songs" queue, so it's easy to rank all my music.

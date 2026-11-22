@@ -1,10 +1,11 @@
-import { createStore, isDemo } from './store.js?v=13';
-import { searchSongs } from './itunes.js?v=13';
+import { createStore, isDemo } from './store.js?v=14';
+import { searchSongs } from './itunes.js?v=14';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=13';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=13';
+} from './stats.js?v=14';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=14';
+import { buildForYou, freshPreviews } from './recommend.js?v=14';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -34,7 +35,10 @@ const state = {
   unranked: [],      // songs brought in from a music library, waiting to be ranked (oldest first)
   unShown: 100,      // how many of them the list shows before "Show more"
   importing: null,   // { text, file: {name, text}, artistFirst, parsed } while the Import window is open
-  queueItem: null,   // the Unranked song being ranked right now
+  queueItem: null,   // the Unranked (or For you) song being ranked right now
+  playlist: null,    // { name, kind, songs } while a playlist is open
+  forYou: null,      // { at, songs } the latest "For you" list
+  forYouBusy: null,  // progress text while it's being built
   authMode: 'in',
   filters: { q: '', tag: '', genre: '', decade: '', sort: 'score', stale: false, uq: '' },
   friends: { accepted: [], incoming: [], outgoing: [] },
@@ -49,6 +53,32 @@ const state = {
 
 boot();
 
+// An invite link (#7): the app's address plus ?invite=CODE. The code is kept until the person
+// is signed in (even through "confirm your email"), then the friend request goes out by itself.
+const INVITE_KEY = 'songrank-invite';
+const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* private window */ } };
+const inviteLink = () => `${location.origin}${location.pathname}?invite=${encodeURIComponent(state.me?.friend_code || '')}`;
+{
+  const code = new URLSearchParams(location.search).get('invite');
+  if (code) {
+    lsSet(INVITE_KEY, code.trim().toUpperCase().slice(0, 12));
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+  if (lsGet(INVITE_KEY)) state.authMode = 'up';
+}
+async function claimInvite() {
+  const code = lsGet(INVITE_KEY);
+  if (!code || !state.me) return;
+  lsSet(INVITE_KEY, null);
+  if (code === state.me.friend_code) return;
+  try {
+    const msg = await store.addFriend(code);
+    state.friends = await store.friends();
+    toast(`Invite: ${msg}`);
+  } catch (e) { toast(`Invite: ${e.message}`); }
+}
+
 async function boot() {
   if (isDemo) {
     $('#banner').innerHTML = `<div class="banner">Practice mode: saved only in this browser. Friend code <b>SAM123</b> adds a practice friend.</div>`;
@@ -56,7 +86,7 @@ async function boot() {
   try {
     store = await createStore();
     state.uid = await store.currentUser();
-    if (state.uid) await loadAll();
+    if (state.uid) { await loadAll(); await claimInvite(); }
   } catch (e) {
     $('#app').innerHTML = `<p class="err center">Couldn't start: ${esc(e.message)}</p>`;
     return;
@@ -71,6 +101,7 @@ async function loadAll() {
   state.friends = await store.friends();
   // A missing Unranked table (live database not updated yet) shouldn't stop the app.
   try { state.unranked = await store.unranked(); } catch { state.unranked = []; }
+  loadForYou();
 }
 
 // ---------------------------------------------------------------- rendering
@@ -91,6 +122,7 @@ function authView() {
   <section class="card auth">
     <h1>Rank every song you love.</h1>
     <p class="muted">Score songs from 1 to 100, tag them for moments, and compare with friends.</p>
+    ${lsGet(INVITE_KEY) ? `<p class="heard">You've been invited! Create your account (or sign in) and you'll be linked as friends automatically.</p>` : ''}
     <div class="seg">
       <button class="${!up ? 'on' : ''}" data-action="auth-mode" data-mode="in">Sign in</button>
       <button class="${up ? 'on' : ''}" data-action="auth-mode" data-mode="up">Create account</button>
@@ -112,7 +144,8 @@ const whoHtml = () => `
     <button class="profile-btn" data-action="toggle-profile" aria-haspopup="true" aria-label="Your account">${avatar(state.me)}</button>
     <div class="profile-menu" role="menu">
       <div class="pm-name">${esc(state.me?.display_name)}</div>
-      <div class="muted small">Friend code <b>${esc(state.me?.friend_code)}</b></div>
+      <button class="link small code-copy" data-action="copy-plain-code" title="Copy your friend code">Friend code <b>${esc(state.me?.friend_code)}</b> · copy</button>
+      <button class="link small" data-action="share-invite" role="menuitem">Share invite…</button>
       <button class="link danger-link" data-action="sign-out" role="menuitem">Sign out</button>
     </div>
   </div>`;
@@ -142,7 +175,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=13" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=14" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -280,6 +313,7 @@ function tasteView() {
   const s = tasteStats(state.ratings);
   if (!s.count) return `<div class="empty">Rank a few songs and your taste shows up here.</div>`;
   return `
+  ${playlistsCard()}
   <section class="card">
     ${tasteSummary(s)}
     <div class="stats">
@@ -296,6 +330,180 @@ function tasteView() {
     `<button class="chip" data-action="filter-tag" data-tag="${esc(t.name)}">${esc(t.name)} <span class="muted">${t.count}</span></button>`).join('')}</div></section>` : ''}
   <p class="muted small">Bars show your average score; the small number is how many songs. Your favorite is where most of your 80-and-up songs come from, so one perfect score doesn't win on its own.</p>`;
 }
+
+// ---------------------------------------------------------------- playlists (#9) and For you (#11)
+
+// Playlists made from my rankings: favorites, each moment tag, each decade and genre I love.
+function myPlaylists() {
+  const top = (xs, min = 0) => xs.filter((r) => r.score >= min).sort((a, b) => b.score - a.score);
+  const R = state.ratings;
+  const lists = [
+    { id: 'p:90', name: 'My 90+ songs', songs: top(R, 90) },
+    { id: 'p:80', name: 'Songs I love (80+)', songs: top(R, 80) },
+  ];
+  const s = tasteStats(R);
+  for (const t of s.tags) lists.push({ id: `t:${t.name}`, name: t.name, songs: top(R.filter((r) => (r.tags || []).includes(t.name))) });
+  for (const d of s.decades) {
+    const songs = top(R.filter((r) => decadeOf(r.release_year) === d.name), 70);
+    if (songs.length >= 3) lists.push({ id: `d:${d.name}`, name: `Best of the ${decadeLabel(d.name)}`, songs });
+  }
+  for (const g of s.genres) {
+    const songs = top(R.filter((r) => r.genre === g.name), 70);
+    if (songs.length >= 3) lists.push({ id: `g:${g.name}`, name: `Top ${g.name}`, songs });
+  }
+  return lists.filter((l) => l.songs.length);
+}
+
+function playlistsCard() {
+  const fy = state.forYou;
+  const lists = myPlaylists();
+  return `
+  <section class="card">
+    <h2>Playlists</h2>
+    <div class="foryou-row">
+      <div><b>For you</b><div class="muted small">${state.forYouBusy ? esc(state.forYouBusy)
+        : fy?.songs?.length ? `${fy.songs.length} new songs like your favorites · made ${fmtDate(fy.at)}` : 'New songs similar to the ones you love most.'}</div></div>
+      ${state.forYouBusy ? '' : fy?.songs?.length
+        ? `<div class="row"><button class="primary" data-action="open-playlist" data-id="foryou">Open</button><button data-action="fy-build" title="Find a fresh set">↻</button></div>`
+        : `<button class="primary" data-action="fy-build">Find new music</button>`}
+    </div>
+    <ul class="people pl-list">${lists.map((l) => `
+      <li class="person clickable" data-action="open-playlist" data-id="${esc(l.id)}">
+        <span>${esc(l.name)}</span><span class="muted small">${l.songs.length} song${l.songs.length === 1 ? '' : 's'} ›</span>
+      </li>`).join('')}</ul>
+  </section>`;
+}
+
+function openPlaylist(id) {
+  if (id === 'foryou') {
+    state.playlist = { id, name: 'For you', kind: 'foryou', songs: state.forYou?.songs || [] };
+    const fy = state.forYou;
+    if (fy && Date.now() - new Date(fy.previewsAt || fy.at) > 10 * 60000) {
+      freshPreviews(fy.songs).then((songs) => {
+        if (state.forYou !== fy) return;
+        const byId = new Map(songs.map((x) => [x.song_id, x.preview_url]));
+        fy.songs = fy.songs.map((x) => ({ ...x, preview_url: byId.get(x.song_id) || x.preview_url }));
+        fy.previewsAt = new Date().toISOString();
+        saveForYou();
+        if (state.playlist?.kind === 'foryou' && !playingUrl) renderModal();
+      }).catch(() => {});
+    }
+  } else {
+    const l = myPlaylists().find((x) => x.id === id);
+    if (!l) return;
+    state.playlist = { ...l, kind: 'mine' };
+  }
+  renderModal();
+}
+
+function playlistModal() {
+  const pl = state.playlist;
+  const fy = pl.kind === 'foryou';
+  // For you leaves out anything ranked or saved since it was made.
+  const done = new Set([...state.ratings, ...state.unranked].map(songKey));
+  const songs = fy ? (state.forYou?.songs || []).filter((x) => !done.has(songKey(x))) : pl.songs;
+  pl.songs = songs;
+  const fyRow = (x) => `
+    <li class="song fy">
+      <button class="art-btn" ${x.preview_url ? `data-action="preview" data-url="${esc(x.preview_url)}"` : 'disabled'} title="Play a preview" aria-label="Play a preview of ${esc(x.title)}">
+        ${art(x)}<span class="art-play" aria-hidden="true">▶</span></button>
+      <div class="info">
+        <div class="title">${esc(x.title)}</div>
+        <div class="muted small">${esc(x.artist)}</div>
+        <div class="tiny muted">${esc(x.because || '')}</div>
+      </div>
+      <div class="row un-btns">
+        <button class="primary" data-action="fy-rank" data-id="${esc(x.song_id)}">Rank</button>
+        <button class="icon" data-action="fy-save" data-id="${esc(x.song_id)}" title="Save to Unranked for later" aria-label="Save for later">＋</button>
+        <button class="icon" data-action="fy-nope" data-id="${esc(x.song_id)}" title="Not for me" aria-label="Not for me">✕</button>
+      </div>
+    </li>`;
+  return `
+  <div class="overlay" data-action="close-modal-bg">
+    <div class="modal playlist" role="dialog" aria-label="${esc(pl.name)}">
+      <div class="row between"><h2>${esc(pl.name)}</h2><button class="link" data-action="close-playlist">Done</button></div>
+      ${fy ? `<p class="muted small">Songs from artists like your favorites, found in Deezer's free catalog. Tap a cover to hear a preview.
+        <b>Rank</b> it, <b>＋</b> save it for later, or <b>✕</b> if it's not for you. Your scores teach it what to find next time.</p>` : ''}
+      <p class="muted small">${songs.length} song${songs.length === 1 ? '' : 's'}</p>
+      <ul class="songs">${songs.map((x) => (fy ? fyRow(x) : songRow(x, { clickable: false }))).join('') || '<li class="empty">Nothing left here. Tap ↻ for a fresh set.</li>'}</ul>
+      ${songs.length ? `
+      <h3>Put it in your music app</h3>
+      <div class="row wrap pl-actions">
+        <button class="primary" data-action="pl-download">Download file</button>
+        <button data-action="pl-copy">Copy list</button>
+        <button data-action="pl-share">Share</button>
+      </div>
+      <p class="tiny muted">For YouTube Music (or any app): download the file, open the free site
+        <a href="https://www.tunemymusic.com/transfer/file-to-youtube-music" target="_blank" rel="noopener">TuneMyMusic</a>,
+        choose <b>File</b> as the source and upload it, then pick <b>YouTube Music</b> as the destination.</p>` : ''}
+    </div>
+  </div>`;
+}
+
+const playlistText = (pl) => pl.songs.map((x) => `${x.title} – ${x.artist}`).join('\n');
+// A spreadsheet file (CSV) that transfer sites read: one song per row.
+function downloadPlaylist(pl) {
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = ['Track name,Artist name,Album', ...pl.songs.map((x) => [x.title, x.artist, x.album].map(cell).join(','))].join('\r\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv' })),
+    download: `${pl.name.replace(/[^\w\s-]+/g, '').trim() || 'playlist'}.csv`,
+  });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('Downloaded. Upload it at TuneMyMusic to send it to YouTube Music.');
+}
+
+// "For you" is kept on this device for a while, so it doesn't have to be rebuilt every visit.
+const fyKey = () => `songrank-foryou-${state.uid}`;
+const nopeKey = () => `songrank-notforme-${state.uid}`;
+const loadNope = () => { try { return JSON.parse(lsGet(nopeKey())) || { songs: [], artists: {} }; } catch { return { songs: [], artists: {} }; } };
+function loadForYou() { try { state.forYou = JSON.parse(lsGet(fyKey())); } catch { state.forYou = null; } }
+const saveForYou = () => lsSet(fyKey(), JSON.stringify(state.forYou));
+
+async function makeForYou() {
+  if (state.forYouBusy) return;
+  state.forYouBusy = 'Starting…';
+  render();
+  try {
+    const res = await buildForYou({
+      ratings: state.ratings, unranked: state.unranked, notForMe: loadNope(),
+      onProgress: (t) => { state.forYouBusy = t; render(); },
+    });
+    if (res.needMore) { toast('Score a few more songs 80 or higher (from at least 2 artists) so it knows what you love.'); return; }
+    if (!res.songs.length) { toast("Couldn't find new songs right now. Try again later."); return; }
+    state.forYou = { at: new Date().toISOString(), songs: res.songs };
+    saveForYou();
+    state.forYouBusy = null;
+    openPlaylist('foryou');
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    state.forYouBusy = null;
+    render();
+  }
+}
+
+// Take a song off For you. "Not for me" is remembered; two of those from one artist and it stops suggesting them.
+function dropForYou(id, nope) {
+  const song = (state.forYou?.songs || []).find((x) => x.song_id === id);
+  if (!song) return;
+  if (nope) {
+    const n = loadNope();
+    n.songs = [...new Set([...n.songs, songKey(song)])].slice(-500);
+    const a = song.artist.toLowerCase().split(/\s*(?:,|&)\s*/)[0].replace(/[^a-z0-9]+/g, ' ').trim();
+    n.artists[a] = (n.artists[a] || 0) + 1;
+    lsSet(nopeKey(), JSON.stringify(n));
+  }
+  state.forYou.songs = state.forYou.songs.filter((x) => x.song_id !== id);
+  saveForYou();
+  renderModal();
+}
+
+function copyText(text, done) {
+  navigator.clipboard?.writeText(text).then(() => toast(done), () => toast("Couldn't copy here. Try Share instead."));
+}
+const inviteText = () => `Rank songs with me on Song Ranker! Open this link to make an account and we'll be linked as friends:\n${inviteLink()}\n(My friend code: ${state.me.friend_code})`;
 
 // How my scores have moved since I first ranked each song.
 function overTimeCard() {
@@ -325,8 +533,9 @@ function friendsView() {
   return `
   <section class="card">
     <h2>Your friend code</h2>
-    <div class="code-row"><span class="code">${esc(state.me?.friend_code)}</span><button data-action="copy-code">Copy invite</button></div>
-    <p class="muted small">Send it to a friend. Once they've made an account, they type it in below on their side.</p>
+    <div class="code-row"><span class="code">${esc(state.me?.friend_code)}</span>
+      <div class="row"><button class="primary" data-action="share-invite">Share invite</button><button data-action="copy-code">Copy</button></div></div>
+    <p class="muted small">Send the invite to a friend. When they open its link and make an account, the friend request comes to you automatically. They can also type your code below on their side.</p>
     <form id="friend-form" class="row">
       <input name="code" placeholder="Enter a friend's code" required autocapitalize="characters" maxlength="12">
       <button class="primary" type="submit">Add</button>
@@ -383,6 +592,7 @@ function renderModal() {
   if (state.guide) root.innerHTML = guideModal();
   else if (state.manual) root.innerHTML = manualModal();
   else if (state.rating) root.innerHTML = rateModal();
+  else if (state.playlist) root.innerHTML = playlistModal();
   else if (state.importing) {
     if (!$('#import-text')) root.innerHTML = importModal();
     renderImportSummary();
@@ -393,7 +603,7 @@ function renderModal() {
         <div class="modal" role="dialog" aria-label="Find a song">
           <div class="row"><input id="search-input" type="search" placeholder="Start typing a song title…" autocomplete="off" value="${esc(state.search.term)}">
           <button class="link" data-action="close-modal">Cancel</button></div>
-          ${state.queueItem ? `<p class="heard">From your Unranked list: <b>${esc(state.queueItem.title)}</b>${state.queueItem.artist ? ` · ${esc(state.queueItem.artist)}` : ''}. Pick the right version:</p>` : ''}
+          ${state.queueItem ? `<p class="heard">${state.queueItem.from ? `From ${esc(state.queueItem.from)}` : 'From your Unranked list'}: <b>${esc(state.queueItem.title)}</b>${state.queueItem.artist ? ` · ${esc(state.queueItem.artist)}` : ''}. Pick the right version:</p>` : ''}
           <ul id="results" class="results"></ul>
           <p class="add-own small muted">Not in the list? <button class="link" data-action="manual-add">Add it yourself</button></p>
           <p class="shazam-tip tiny muted">Don't know the name? Identify it with Shazam (it's in your iPhone's Control Center), then type it here.</p>
@@ -450,8 +660,8 @@ function rateModal() {
           <div class="muted small">${esc(song.artist)}</div>
           <div class="muted small">${esc([song.album, song.release_year, song.genre].filter(Boolean).join(' · '))}</div>
         </div>
-        ${song.preview_url ? `<button class="icon" data-action="preview" data-url="${esc(song.preview_url)}" title="Play a preview">▶</button>` : ''}
       </div>
+      ${song.preview_url ? `<button class="play-btn" data-action="preview" data-url="${esc(song.preview_url)}" data-play="▶ Play preview" data-pause="❚❚ Pause">▶ Play preview</button>` : ''}
       ${mine ? `<p class="history small ${stale ? 'stale' : 'muted'}">Ranked ${fmtDate(mine.rated_at)}${stale ? ', a while ago. Still feel the same?' : ''}
         ${steps.length > 1 ? `<br>History: ${steps.map((h) => `<b>${h.score}</b> (${fmtDate(h.rated_at)})`).join(' → ')}` : ''}</p>` : ''}
       <div class="dial">
@@ -686,15 +896,19 @@ function runSearch(term) {
 
 const audio = new Audio();
 let playingUrl = null;
+// Buttons can carry their own words (data-play / data-pause); plain ones show ▶ and ❚❚.
+// Cover-art buttons keep their picture and just show a playing state.
+const setPlay = (b, on) => { if (b.classList.contains('art-btn')) b.classList.toggle('playing', on); else b.textContent = on ? b.dataset.pause || '❚❚' : b.dataset.play || '▶'; };
+const resetPlayButtons = () => document.querySelectorAll('[data-action="preview"]').forEach((b) => setPlay(b, false));
 function togglePreview(url, btn) {
-  document.querySelectorAll('[data-action="preview"]').forEach((b) => { b.textContent = '▶'; });
+  resetPlayButtons();
   if (playingUrl === url && !audio.paused) { audio.pause(); playingUrl = null; return; }
   audio.src = url;
   audio.play().catch(() => toast("Couldn't play the preview"));
   playingUrl = url;
-  btn.textContent = '❚❚';
+  setPlay(btn, true);
 }
-audio.addEventListener('ended', () => { playingUrl = null; document.querySelectorAll('[data-action="preview"]').forEach((b) => { b.textContent = '▶'; }); });
+audio.addEventListener('ended', () => { playingUrl = null; resetPlayButtons(); });
 
 // ---------------------------------------------------------------- events
 
@@ -713,7 +927,7 @@ async function act(fn) {
 
 function closeModals() {
   state.search = null; state.rating = null; state.manual = null; state.guide = false;
-  state.importing = null; state.queueItem = null;
+  state.importing = null; state.queueItem = null; state.playlist = null;
   audio.pause();
   renderModal();
 }
@@ -737,7 +951,7 @@ document.addEventListener('click', (e) => {
     }
     case 'sign-out': act(async () => {
       await store.signOut();
-      Object.assign(state, { uid: null, me: null, ratings: [], history: [], unranked: [], comparing: null, view: 'library', leftView: 'library', rightView: 'taste' });
+      Object.assign(state, { uid: null, me: null, ratings: [], history: [], unranked: [], forYou: null, playlist: null, comparing: null, view: 'library', leftView: 'library', rightView: 'taste' });
       render();
     }); break;
     case 'view': {
@@ -775,6 +989,7 @@ document.addEventListener('click', (e) => {
       // Once a song is ranked it leaves the Unranked list (the one being ranked, plus any same-song match).
       const k = songKey(song);
       const done = state.unranked.filter((u) => u.id === state.queueItem?.id || songKey(u) === k).map((u) => u.id);
+      const backToForYou = state.queueItem?.from === 'For you';
       state.queueItem = null;
       if (done.length) {
         await store.removeUnranked(done);
@@ -785,6 +1000,7 @@ document.addEventListener('click', (e) => {
       state.rating = null; audio.pause();
       toast(`Ranked ${song.title}: ${score} · ${tierOf(score).name}`);
       render();
+      if (backToForYou) openPlaylist('foryou');
     }); break;
     case 'delete-rating': act(async () => {
       const { song } = state.rating;
@@ -840,12 +1056,44 @@ document.addEventListener('click', (e) => {
       render();
     }); break;
     case 'un-more': state.unShown += 200; render(); break;
-    case 'copy-code': {
-      const link = location.href.split(/[?#]/)[0];
-      const text = `Rank songs with me on Song Ranker: ${link}\nMy friend code: ${state.me.friend_code}`;
-      navigator.clipboard?.writeText(text).then(() => toast('Invite copied. Paste it in a text.'), () => toast(`Your code: ${state.me.friend_code}`));
+    case 'copy-code': copyText(inviteText(), 'Invite copied. Paste it in a text.'); break;
+    case 'copy-plain-code': copyText(state.me.friend_code, `Copied your code: ${state.me.friend_code}`); break;
+    case 'share-invite': {
+      closeProfileMenus();
+      const text = inviteText();
+      // The phone's share sheet (Messages, etc.); computers without one copy instead.
+      if (navigator.share) navigator.share({ title: 'Song Ranker', text }).catch(() => {});
+      else copyText(text, 'Invite copied. Paste it in a text.');
       break;
     }
+    case 'open-playlist': openPlaylist(el.dataset.id); break;
+    case 'close-playlist': state.playlist = null; audio.pause(); renderModal(); break;
+    case 'pl-copy': copyText(playlistText(state.playlist), 'Playlist copied as a list'); break;
+    case 'pl-download': downloadPlaylist(state.playlist); break;
+    case 'pl-share': {
+      const text = playlistText(state.playlist);
+      if (navigator.share) navigator.share({ title: state.playlist.name, text }).catch(() => {});
+      else copyText(text, 'Playlist copied as a list');
+      break;
+    }
+    case 'fy-build': makeForYou(); break;
+    case 'fy-rank': {
+      const song = (state.forYou?.songs || []).find((x) => x.song_id === id);
+      if (!song) break;
+      state.playlist = null; audio.pause();
+      state.queueItem = { id: song.song_id, title: song.title, artist: song.artist, from: 'For you' };
+      openSearch(searchTermFor(song));
+      break;
+    }
+    case 'fy-save': act(async () => {
+      const song = (state.forYou?.songs || []).find((x) => x.song_id === id);
+      if (!song) return;
+      await store.addUnranked([{ title: song.title, artist: song.artist, album: song.album, source: 'for-you' }]);
+      state.unranked = await store.unranked();
+      dropForYou(id, false);
+      toast(`Saved ${song.title} to Unranked`);
+    }); break;
+    case 'fy-nope': dropForYou(id, true); break;
     case 'accept': act(async () => { await store.acceptFriend(id); await refreshFriends(); toast('Friend added'); }); break;
     case 'unfriend': act(async () => { await store.removeFriend(id); await refreshFriends(); }); break;
     case 'compare': act(async () => {
@@ -907,7 +1155,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.querySelector('.profile.open')) { closeProfileMenus(); return; }
     if (state.guide) { state.guide = false; renderModal(); return; }
-    if (state.search || state.rating || state.manual || state.importing) { closeModals(); return; }
+    if (state.search || state.rating || state.manual || state.importing || state.playlist) { closeModals(); return; }
   }
   if (e.target.id !== 'search-input' || !state.search) return;
   const s = state.search;
@@ -931,6 +1179,7 @@ document.addEventListener('submit', (e) => {
         }
         state.uid = await store.currentUser();
         await loadAll();
+        await claimInvite();
         render();
       } catch (err) {
         $('#auth-err').textContent = err.message;

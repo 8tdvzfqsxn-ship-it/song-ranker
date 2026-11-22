@@ -1,7 +1,7 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
 // Practice mode leaves out the extras that need a server, like the other catalogs.
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=13';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=14';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
