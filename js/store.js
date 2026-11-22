@@ -1,12 +1,18 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
 // Practice mode leaves out the extras that need a server, like the other catalogs.
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=12';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=13';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
 const RATING_FIELDS = ['song_id', 'title', 'artist', 'album', 'genre', 'release_year', 'artwork_url', 'preview_url', 'score', 'tags'];
 const pick = (r) => Object.fromEntries(RATING_FIELDS.map((f) => [f, r[f] ?? null]));
+const UNRANKED_FIELDS = ['title', 'artist', 'album', 'source', 'added_at'];
+const pickUnranked = (r) => Object.fromEntries(UNRANKED_FIELDS.map((f) => [f, r[f] ?? null]));
+// The Unranked list is a queue: oldest first. Imports get one millisecond apart so they keep their order.
+const stamp = (rows) => { const t = Date.now(); return rows.map((r, i) => ({ ...pickUnranked(r), added_at: new Date(t + i).toISOString() })); };
+const byAdded = (a, b) => a.added_at.localeCompare(b.added_at);
+const chunks = (xs, n) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 function groupFriends(rows, profiles, uid) {
   const byId = new Map(profiles.map((p) => [p.id, p]));
@@ -33,6 +39,7 @@ function demoStore() {
   try { db = JSON.parse(localStorage.getItem(KEY)); } catch { db = null; }
   if (!db) db = seed();
   db.history ||= {};
+  db.unranked ||= {};
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* private window */ } };
   const code = () => Math.random().toString(16).slice(2, 8).toUpperCase();
   let uid = db.session;
@@ -68,6 +75,24 @@ function demoStore() {
       save();
     },
     async deleteRating(songId) { db.ratings[uid] = db.ratings[uid].filter((x) => x.song_id !== songId); save(); },
+    // Songs brought in from a music library, waiting to be ranked.
+    async unranked() { return [...(db.unranked[uid] || [])].sort(byAdded); },
+    async addUnranked(rows) {
+      let n = 0;
+      (db.unranked[uid] ||= []).push(...stamp(rows).map((r) => ({ ...r, id: `un-${Date.now()}-${n++}` })));
+      save();
+    },
+    async removeUnranked(ids) {
+      const drop = new Set(ids);
+      db.unranked[uid] = (db.unranked[uid] || []).filter((x) => !drop.has(x.id));
+      save();
+    },
+    async clearUnranked() { db.unranked[uid] = []; save(); },
+    // Skip = to the back of the line.
+    async skipUnranked(id) {
+      const x = (db.unranked[uid] || []).find((r) => r.id === id);
+      if (x) { x.added_at = new Date().toISOString(); save(); }
+    },
     async friends() {
       const rows = db.friendships.filter((f) => f.requester === uid || f.addressee === uid);
       return groupFriends(rows, Object.values(db.users), uid);
@@ -173,6 +198,29 @@ async function supabaseStore() {
     },
     async deleteRating(songId) {
       ok(await sb.from('ratings').delete().eq('user_id', uid).eq('song_id', songId));
+    },
+    // Songs brought in from a music library, waiting to be ranked (supabase/setup.sql: unranked).
+    async unranked() {
+      // Supabase sends at most 1000 rows per request, and a library can be bigger.
+      const all = [];
+      for (let from = 0; ; from += 1000) {
+        const page = ok(await sb.from('unranked').select('id, title, artist, album, source, added_at')
+          .eq('user_id', uid).order('added_at').order('id').range(from, from + 999));
+        all.push(...page);
+        if (page.length < 1000) return all;
+      }
+    },
+    async addUnranked(rows) {
+      for (const part of chunks(stamp(rows), 500)) {
+        ok(await sb.from('unranked').insert(part.map((r) => ({ ...r, user_id: uid }))));
+      }
+    },
+    async removeUnranked(ids) {
+      for (const part of chunks(ids, 100)) ok(await sb.from('unranked').delete().eq('user_id', uid).in('id', part));
+    },
+    async clearUnranked() { ok(await sb.from('unranked').delete().eq('user_id', uid)); },
+    async skipUnranked(id) {
+      ok(await sb.from('unranked').update({ added_at: new Date().toISOString() }).eq('user_id', uid).eq('id', id));
     },
     async friends() {
       const rows = ok(await sb.from('friendships').select('*'));

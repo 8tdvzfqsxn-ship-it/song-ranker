@@ -1,9 +1,10 @@
-import { createStore, isDemo } from './store.js?v=12';
-import { searchSongs } from './itunes.js?v=12';
+import { createStore, isDemo } from './store.js?v=13';
+import { searchSongs } from './itunes.js?v=13';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=12';
+} from './stats.js?v=13';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=13';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -28,11 +29,17 @@ const state = {
   ratings: [],
   history: [],       // every score I've given, with dates
   view: 'library',
+  leftView: 'library',  // wide screens: My songs or Unranked on the left
+  rightView: 'taste',   // and My taste or Friends on the right
+  unranked: [],      // songs brought in from a music library, waiting to be ranked (oldest first)
+  unShown: 100,      // how many of them the list shows before "Show more"
+  importing: null,   // { text, file: {name, text}, artistFirst, parsed } while the Import window is open
+  queueItem: null,   // the Unranked song being ranked right now
   authMode: 'in',
-  filters: { q: '', tag: '', genre: '', decade: '', sort: 'score', stale: false },
+  filters: { q: '', tag: '', genre: '', decade: '', sort: 'score', stale: false, uq: '' },
   friends: { accepted: [], incoming: [], outgoing: [] },
   comparing: null,   // { friend, ratings }
-  search: null,      // { term, results, active, loading, error, heard }
+  search: null,      // { term, results, active, loading, error }
   rating: null,      // { song, score, tags:Set, existing }
   manual: null,      // { title } while adding a song by hand
   guide: false,      // the "How to rank" page is open
@@ -62,6 +69,8 @@ async function loadAll() {
   state.ratings = await store.ratingsOf(state.uid);
   state.history = await store.historyOf();
   state.friends = await store.friends();
+  // A missing Unranked table (live database not updated yet) shouldn't stop the app.
+  try { state.unranked = await store.unranked(); } catch { state.unranked = []; }
 }
 
 // ---------------------------------------------------------------- rendering
@@ -118,10 +127,12 @@ wideScreen.addEventListener('change', () => { if (state.uid) render(); });
 
 function mainView() {
   const wide = wideScreen.matches;
-  const shown = wide && state.view === 'library' ? 'taste' : state.view;
-  const tab = (id, label) => `<button class="${shown === id ? 'on' : ''}" data-action="view" data-view="${id}">${label}</button>`;
+  const shown = wide ? state.rightView : state.view;
+  const left = state.leftView;
+  const tab = (id, label, cur = shown) => `<button class="${cur === id ? 'on' : ''}" data-action="view" data-view="${id}">${label}</button>`;
   const badge = state.friends.incoming.length ? ` <span class="dot">${state.friends.incoming.length}</span>` : '';
-  const panel = (v) => v === 'library' ? libraryView() : v === 'taste' ? tasteView() : state.comparing ? compareView() : friendsView();
+  const count = state.unranked.length ? ` <span class="muted small">${state.unranked.length}</span>` : '';
+  const panel = (v) => v === 'library' ? libraryView() : v === 'unranked' ? unrankedView() : v === 'taste' ? tasteView() : state.comparing ? compareView() : friendsView();
   const top = `
     <div class="actions-top">
       <button class="primary big" data-action="open-search">＋ Rank a song</button>
@@ -131,7 +142,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=12" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=13" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -139,12 +150,12 @@ function mainView() {
       <div class="who-wide">${whoHtml()}</div>
     </div>
     <div class="cols">
-      <div class="col" data-key="songs"><h2 class="col-title">My songs</h2>${libraryView()}</div>
+      <div class="col" data-key="left:${left}"><nav class="seg tabs">${tab('library', 'My songs', left)}${tab('unranked', 'Unranked' + count, left)}</nav>${panel(left)}</div>
       <div class="col side" data-key="${shown}:${esc(state.comparing?.friend.id || '')}"><nav class="seg tabs">${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>${panel(shown)}</div>
     </div>`;
   }
   return `${top}
-    <nav class="seg tabs">${tab('library', 'My songs')}${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>
+    <nav class="seg tabs four">${tab('library', 'My songs')}${tab('unranked', 'Unranked')}${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>
     ${panel(state.view)}`;
 }
 
@@ -175,7 +186,8 @@ function libraryView() {
   const f = state.filters;
   const all = state.ratings;
   if (!all.length) {
-    return `<div class="empty">No songs yet. Tap <b>Rank a song</b> and start typing a title.</div>`;
+    return `<div class="empty">No songs yet. Tap <b>Rank a song</b> and start typing a title,
+      or bring in your music library with <button class="link" data-action="import-open">Import songs</button>.</div>`;
   }
   const uniq = (xs) => [...new Set(xs.filter((x) => x != null && x !== ''))];
   const tags = uniq(all.flatMap((r) => r.tags || [])).sort();
@@ -210,6 +222,41 @@ function libraryView() {
   </div>
   <p class="muted small">${list.length} of ${all.length} songs</p>
   <ul class="songs">${list.map((r) => songRow(r, { showDate: true })).join('') || '<li class="empty">Nothing matches those filters.</li>'}</ul>`;
+}
+
+// Songs brought in from a music library, waiting their turn. Oldest first; Skip sends one to the back.
+function unrankedView() {
+  const all = state.unranked;
+  if (!all.length) {
+    return `<div class="empty">
+      <p>Bring in the songs from your music app, and they wait here until you rank them.</p>
+      <button class="primary" data-action="import-open">Import songs</button></div>`;
+  }
+  const q = state.filters.uq.trim().toLowerCase();
+  const list = q ? all.filter((u) => `${u.title} ${u.artist}`.toLowerCase().includes(q)) : all;
+  const shown = list.slice(0, state.unShown);
+  const row = (u) => `
+    <li class="song un">
+      <div class="info">
+        <div class="title">${esc(u.title)}</div>
+        <div class="muted small">${esc([u.artist, u.album].filter(Boolean).join(' · ') || 'Artist unknown')}</div>
+      </div>
+      <div class="row un-btns">
+        <button class="primary" data-action="un-rank" data-id="${esc(u.id)}">Rank</button>
+        <button data-action="un-skip" data-id="${esc(u.id)}" title="Not now: move it to the end">Skip</button>
+        <button class="icon" data-action="un-remove" data-id="${esc(u.id)}" title="Remove from the list" aria-label="Remove ${esc(u.title)}">✕</button>
+      </div>
+    </li>`;
+  return `
+  <div class="row un-head">
+    <button class="primary grow" data-action="un-next">Rank the next one</button>
+    <button data-action="import-open">Import songs</button>
+  </div>
+  <input class="un-filter" data-filter="uq" type="search" placeholder="Find in Unranked" value="${esc(state.filters.uq)}">
+  <p class="muted small">${q ? `${list.length} of ${all.length}` : all.length} song${all.length === 1 ? '' : 's'} waiting. <b>Rank</b> finds it in the catalog; <b>Skip</b> moves it to the end.</p>
+  <ul class="songs">${shown.map(row).join('') || '<li class="empty">Nothing matches.</li>'}</ul>
+  ${list.length > shown.length ? `<button class="more" data-action="un-more">Show more (${list.length - shown.length} left)</button>` : ''}
+  <p class="center"><button class="link small danger-link-plain" data-action="un-clear">Remove all ${all.length} from Unranked</button></p>`;
 }
 
 function bars(groups, labelFn) {
@@ -336,14 +383,17 @@ function renderModal() {
   if (state.guide) root.innerHTML = guideModal();
   else if (state.manual) root.innerHTML = manualModal();
   else if (state.rating) root.innerHTML = rateModal();
-  else if (state.search) {
+  else if (state.importing) {
+    if (!$('#import-text')) root.innerHTML = importModal();
+    renderImportSummary();
+  } else if (state.search) {
     if (!$('#search-input')) {
       root.innerHTML = `
       <div class="overlay" data-action="close-modal-bg">
         <div class="modal" role="dialog" aria-label="Find a song">
           <div class="row"><input id="search-input" type="search" placeholder="Start typing a song title…" autocomplete="off" value="${esc(state.search.term)}">
           <button class="link" data-action="close-modal">Cancel</button></div>
-          ${state.search.heard ? `<p class="heard">Heard <b>${esc(state.search.heard)}</b>. Pick the right version:</p>` : ''}
+          ${state.queueItem ? `<p class="heard">From your Unranked list: <b>${esc(state.queueItem.title)}</b>${state.queueItem.artist ? ` · ${esc(state.queueItem.artist)}` : ''}. Pick the right version:</p>` : ''}
           <ul id="results" class="results"></ul>
           <p class="add-own small muted">Not in the list? <button class="link" data-action="manual-add">Add it yourself</button></p>
           <p class="shazam-tip tiny muted">Don't know the name? Identify it with Shazam (it's in your iPhone's Control Center), then type it here.</p>
@@ -458,7 +508,7 @@ function manualModal() {
       <p class="muted small">For songs the catalogs don't have, like covers, remixes or uploads. Year and genre feed your taste stats.</p>
       <form id="manual-form">
         <label>Song title<input name="title" required maxlength="120" value="${esc(state.manual.title)}"></label>
-        <label>Artist<input name="artist" required maxlength="120" autocomplete="off"></label>
+        <label>Artist<input name="artist" required maxlength="120" autocomplete="off" value="${esc(state.manual.artist || '')}"></label>
         <div class="row">
           <label class="grow">Year <span class="muted">(optional)</span><input name="year" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear()}"></label>
           <label class="grow">Genre <span class="muted">(optional)</span><input name="genre" list="genre-list" maxlength="40" autocomplete="off"></label>
@@ -471,6 +521,96 @@ function manualModal() {
       </form>
     </div>
   </div>`;
+}
+
+// The Import window: paste a list or choose a file. Nothing is looked up in a catalog here,
+// so big libraries come in instantly; each song is matched when you tap Rank.
+function importModal() {
+  const im = state.importing;
+  return `
+  <div class="overlay" data-action="close-modal-bg">
+    <div class="modal import" role="dialog" aria-label="Import songs">
+      <div class="row between"><h2>Import songs</h2><button class="link" data-action="close-modal">Cancel</button></div>
+      <p class="muted small">Bring in songs from your music app. They wait in your Unranked list until you rank them. Songs you've already ranked are left out.</p>
+      <details class="how">
+        <summary>How do I get my songs out of my music app?</summary>
+        <dl class="small">
+          <dt>Spotify</dt>
+          <dd>Open <a href="https://exportify.net" target="_blank" rel="noopener">exportify.net</a> (free) and sign in with Spotify.
+            Tap <b>Export</b> next to Liked Songs or a playlist, then choose that file below.</dd>
+          <dt>Apple Music on a Mac</dt>
+          <dd>In the Music app, click a playlist (or <b>Songs</b> for your whole library), then
+            <b>File → Library → Export Playlist…</b>, pick <b>Unicode Text</b>, and choose that file below.</dd>
+          <dt>YouTube Music</dt>
+          <dd>At <a href="https://takeout.google.com" target="_blank" rel="noopener">takeout.google.com</a>, choose
+            <b>Deselect all</b>, tick only <b>YouTube and YouTube Music</b>, and export. Open the download and choose
+            the file named <b>music library songs.csv</b> below. It holds only songs you saved to your library;
+            for liked songs and playlists, use a free transfer site (next).</dd>
+          <dt>Any other app, or iPhone</dt>
+          <dd>A free transfer site like <a href="https://www.tunemymusic.com" target="_blank" rel="noopener">TuneMyMusic</a>
+            can save any app's playlists as a file: pick your app, then <b>Export to file</b> (CSV).
+            Or paste any list with one "Song – Artist" per line.</dd>
+        </dl>
+      </details>
+      <label for="import-text">Paste a list, one song per line</label>
+      <textarea id="import-text" rows="6" spellcheck="false" placeholder="Take On Me – a-ha&#10;Dreams – Fleetwood Mac">${esc(im.text)}</textarea>
+      <div class="row between import-order">
+        <span class="muted small">Each line is</span>
+        <div class="seg">
+          <button class="${!im.artistFirst ? 'on' : ''}" data-action="import-order" data-first="title">Song – Artist</button>
+          <button class="${im.artistFirst ? 'on' : ''}" data-action="import-order" data-first="artist">Artist – Song</button>
+        </div>
+      </div>
+      <p class="center muted small or">or</p>
+      <div id="import-file-row"></div>
+      <div id="import-summary" class="import-summary"></div>
+    </div>
+  </div>`;
+}
+
+// The part of the Import window that changes as you paste or pick a file.
+function renderImportSummary() {
+  const im = state.importing;
+  const fileRow = $('#import-file-row');
+  if (!im || !fileRow) return;
+  fileRow.innerHTML = im.file
+    ? `<div class="file-chip"><span>📄 ${esc(im.file.name)}</span><button class="link" data-action="import-clear-file">Use pasted list instead</button></div>`
+    : `<label class="file-btn">Choose a file (CSV or text)<input id="import-file" type="file" accept=".csv,.txt,.tsv,.tab,text/plain,text/csv,text/tab-separated-values"></label>`;
+  const sum = $('#import-summary');
+  const p = im.parsed;
+  if (!p) { sum.innerHTML = ''; return; }
+  const n = p.fresh.length;
+  const left = [p.ranked && `${p.ranked} already ranked`, p.repeats && `${p.repeats} already waiting or listed twice`].filter(Boolean).join(', ');
+  sum.innerHTML = `
+    <p class="small"><b>${n} new song${n === 1 ? '' : 's'}</b>${left ? ` <span class="muted">(skipping ${left})</span>` : ''}</p>
+    ${!n && !p.ranked && !p.repeats && im.file ? `<p class="small err">No song titles found in this file. Some exports (like Google Takeout's playlists) only list
+      codes, not titles. For YouTube Music, use <b>music library songs.csv</b>, or a free transfer site for likes and playlists.</p>` : ''}
+    ${n ? `<ul class="import-peek small">${p.fresh.slice(0, 3).map((s) =>
+      `<li><b>${esc(s.title)}</b> · ${s.artist ? esc(s.artist) : '<span class="muted">artist unknown</span>'}</li>`).join('')}${n > 3 ? `<li class="muted">and ${n - 3} more</li>` : ''}</ul>
+      ${!im.file || detectSource(im.file.text) === 'file' ? `<p class="tiny muted">Song and artist the wrong way round? Switch "Each line is" above.</p>` : ''}` : ''}
+    <div class="row between actions">
+      <span></span>
+      <button class="primary" data-action="import-add" ${n ? '' : 'disabled'}>Add ${n || ''} to Unranked</button>
+    </div>`;
+}
+
+function updateImport() {
+  const im = state.importing;
+  const text = im.file ? im.file.text : im.text;
+  im.parsed = text.trim() ? sortImport(parseSongs(text, { artistFirst: im.artistFirst }), state.ratings, state.unranked) : null;
+  renderImportSummary();
+}
+
+function openImport() {
+  state.importing = { text: '', file: null, artistFirst: false, parsed: null };
+  renderModal();
+}
+
+// Rank a song from the Unranked list: search the catalog for it, then the usual rating window.
+function rankQueued(item) {
+  if (!item) return;
+  state.queueItem = item;
+  openSearch(searchTermFor(item));
 }
 
 const findMine = (song) => state.ratings.find((r) => r.song_id === song.song_id) || state.ratings.find((r) => songKey(r) === songKey(song));
@@ -500,8 +640,8 @@ async function pickResult(song) {
   openRating(clean);
 }
 
-function openSearch(term = '', heard = null) {
-  state.search = { term, results: [], active: 0, loading: false, error: null, heard };
+function openSearch(term = '') {
+  state.search = { term, results: [], active: 0, loading: false, error: null };
   renderModal();
   if (term) onSearchInput(term);
 }
@@ -573,6 +713,7 @@ async function act(fn) {
 
 function closeModals() {
   state.search = null; state.rating = null; state.manual = null; state.guide = false;
+  state.importing = null; state.queueItem = null;
   audio.pause();
   renderModal();
 }
@@ -596,10 +737,15 @@ document.addEventListener('click', (e) => {
     }
     case 'sign-out': act(async () => {
       await store.signOut();
-      Object.assign(state, { uid: null, me: null, ratings: [], history: [], comparing: null, view: 'library' });
+      Object.assign(state, { uid: null, me: null, ratings: [], history: [], unranked: [], comparing: null, view: 'library', leftView: 'library', rightView: 'taste' });
       render();
     }); break;
-    case 'view': state.view = el.dataset.view; state.comparing = null; render(); if (state.view === 'friends') refreshFriends(); break;
+    case 'view': {
+      const v = el.dataset.view;
+      state.view = v;
+      if (v === 'library' || v === 'unranked') state.leftView = v; else state.rightView = v;
+      state.comparing = null; render(); if (v === 'friends') refreshFriends(); break;
+    }
     case 'open-search': openSearch(); break;
     case 'close-modal': case 'close-modal-bg': closeModals(); break;
     case 'pick': pickResult(state.search.results[+el.dataset.i]); break;
@@ -607,8 +753,12 @@ document.addEventListener('click', (e) => {
     case 'rank-from-friend': openRating(state.comparing.ratings.find((r) => r.song_id === id)); break;
     case 'open-guide': state.guide = true; renderModal(); break;
     case 'close-guide': case 'close-guide-bg': state.guide = false; renderModal(); break;
-    case 'manual-add': state.manual = { title: state.search?.term || '' }; state.search = null; renderModal(); break;
-    case 'manual-back': { const term = state.manual?.title || ''; state.manual = null; openSearch(term); break; }
+    case 'manual-add': {
+      const q = state.queueItem;
+      state.manual = q ? { title: q.title, artist: q.artist } : { title: state.search?.term || '' };
+      state.search = null; renderModal(); break;
+    }
+    case 'manual-back': { const term = state.queueItem ? searchTermFor(state.queueItem) : state.manual?.title || ''; state.manual = null; openSearch(term); break; }
     case 'toggle-stale': state.filters.stale = !state.filters.stale; render(); break;
     case 'toggle-tag': {
       const t = el.dataset.tag;
@@ -622,6 +772,14 @@ document.addEventListener('click', (e) => {
       // Keep the date when only tags changed, so "ranked on" means the last score change.
       const rated_at = prev && prev.score === score ? prev.rated_at : new Date().toISOString();
       await store.saveRating({ ...song, score, tags: [...tags], rated_at });
+      // Once a song is ranked it leaves the Unranked list (the one being ranked, plus any same-song match).
+      const k = songKey(song);
+      const done = state.unranked.filter((u) => u.id === state.queueItem?.id || songKey(u) === k).map((u) => u.id);
+      state.queueItem = null;
+      if (done.length) {
+        await store.removeUnranked(done);
+        state.unranked = state.unranked.filter((u) => !done.includes(u.id));
+      }
       state.ratings = await store.ratingsOf(state.uid);
       state.history = await store.historyOf();
       state.rating = null; audio.pause();
@@ -637,7 +795,51 @@ document.addEventListener('click', (e) => {
       render();
     }); break;
     case 'preview': togglePreview(el.dataset.url, el); break;
-    case 'filter-tag': state.filters = { ...state.filters, tag: el.dataset.tag }; state.view = 'library'; render(); break;
+    case 'filter-tag': state.filters = { ...state.filters, tag: el.dataset.tag }; state.view = 'library'; state.leftView = 'library'; render(); break;
+    case 'import-open': openImport(); break;
+    case 'import-order': state.importing.artistFirst = el.dataset.first === 'artist';
+      el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
+      updateImport(); break;
+    case 'import-clear-file': state.importing.file = null; updateImport(); break;
+    case 'import-add': act(async () => {
+      const im = state.importing;
+      const songs = im?.parsed?.fresh || [];
+      if (!songs.length) return;
+      el.disabled = true; el.textContent = 'Adding…';
+      try {
+        await store.addUnranked(songs.map((x) => ({ ...x, source: im.file ? detectSource(im.file.text) : 'paste' })));
+        state.unranked = await store.unranked();
+      } catch (err) {
+        // Some may have gone in already; re-check so trying again only adds the rest.
+        try { state.unranked = await store.unranked(); } catch { /* keep what we had */ }
+        updateImport();
+        throw err;
+      }
+      closeModals();
+      state.view = 'unranked'; state.leftView = 'unranked'; state.filters.uq = ''; state.unShown = 100;
+      render();
+      toast(`Added ${songs.length} song${songs.length === 1 ? '' : 's'} to Unranked`);
+    }); break;
+    case 'un-next': rankQueued(state.unranked[0]); break;
+    case 'un-rank': rankQueued(state.unranked.find((u) => u.id === id)); break;
+    case 'un-skip': act(async () => {
+      await store.skipUnranked(id);
+      state.unranked = await store.unranked();
+      render();
+      toast('Moved to the end of the list');
+    }); break;
+    case 'un-remove': act(async () => {
+      await store.removeUnranked([id]);
+      state.unranked = state.unranked.filter((u) => u.id !== id);
+      render();
+    }); break;
+    case 'un-clear': act(async () => {
+      if (!confirm(`Remove all ${state.unranked.length} songs from your Unranked list? Your ranked songs stay.`)) return;
+      await store.clearUnranked();
+      state.unranked = [];
+      render();
+    }); break;
+    case 'un-more': state.unShown += 200; render(); break;
     case 'copy-code': {
       const link = location.href.split(/[?#]/)[0];
       const text = `Rank songs with me on Song Ranker: ${link}\nMy friend code: ${state.me.friend_code}`;
@@ -660,9 +862,28 @@ async function refreshFriends() {
   render();
 }
 
+let importTimer;
+// Choosing a file in the Import window.
+document.addEventListener('change', (e) => {
+  if (e.target.id !== 'import-file' || !e.target.files[0]) return;
+  const file = e.target.files[0];
+  act(async () => {
+    if (file.size > 20e6) throw new Error('That file is too big (over 20 MB).');
+    const text = await readFileText(file);
+    if (!state.importing) return;
+    state.importing.file = { name: file.name, text };
+    updateImport();
+  });
+});
+
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.id === 'search-input') onSearchInput(t.value);
+  else if (t.id === 'import-text') {
+    state.importing.text = t.value;
+    clearTimeout(importTimer);
+    importTimer = setTimeout(() => { if (state.importing && !state.importing.file) updateImport(); }, 250);
+  }
   else if (t.id === 'score-range') {
     const n = +t.value;
     state.rating.score = n;
@@ -673,10 +894,12 @@ document.addEventListener('input', (e) => {
     $('#tier-name').textContent = tier.name;
     $('#tier-means').textContent = tier.means;
   } else if (t.dataset.filter) {
-    state.filters[t.dataset.filter] = t.value;
+    const f = t.dataset.filter;
+    state.filters[f] = t.value;
+    if (f === 'uq') state.unShown = 100;
     const pos = t.selectionStart;
     render();
-    if (t.dataset.filter === 'q') { const el = $('[data-filter="q"]'); el.focus({ preventScroll: true }); el.setSelectionRange(pos, pos); }
+    if (f === 'q' || f === 'uq') { const el = $(`[data-filter="${f}"]`); el.focus({ preventScroll: true }); el.setSelectionRange(pos, pos); }
   }
 });
 
@@ -684,7 +907,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.querySelector('.profile.open')) { closeProfileMenus(); return; }
     if (state.guide) { state.guide = false; renderModal(); return; }
-    if (state.search || state.rating || state.manual) { closeModals(); return; }
+    if (state.search || state.rating || state.manual || state.importing) { closeModals(); return; }
   }
   if (e.target.id !== 'search-input' || !state.search) return;
   const s = state.search;

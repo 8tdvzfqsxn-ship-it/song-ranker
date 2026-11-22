@@ -166,3 +166,33 @@ revoke execute on function public.log_rating() from public, anon, authenticated;
 insert into public.rating_history (user_id, song_id, score, rated_at)
 select r.user_id, r.song_id, r.score, r.rated_at from public.ratings r
 where not exists (select 1 from public.rating_history h where h.user_id = r.user_id and h.song_id = r.song_id);
+
+-- ---------------------------------------------------------------- unranked songs (added 2026-11-21)
+-- Songs brought in from a music library, waiting to be ranked. Only you can see or change yours.
+create table if not exists public.unranked (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  title text not null check (char_length(title) <= 200),
+  artist text check (char_length(artist) <= 200),
+  album text check (char_length(album) <= 200),
+  source text check (char_length(source) <= 40),
+  added_at timestamptz not null default now()
+);
+create index if not exists unranked_user_added on public.unranked (user_id, added_at);
+alter table public.unranked enable row level security;
+drop policy if exists "see own unranked" on public.unranked;
+create policy "see own unranked" on public.unranked for select to authenticated
+  using (user_id = auth.uid());
+drop policy if exists "add own unranked" on public.unranked;
+create policy "add own unranked" on public.unranked for insert to authenticated
+  with check (user_id = auth.uid());
+drop policy if exists "change own unranked" on public.unranked;
+create policy "change own unranked" on public.unranked for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "remove own unranked" on public.unranked;
+create policy "remove own unranked" on public.unranked for delete to authenticated
+  using (user_id = auth.uid());
+grant select, insert, update, delete on public.unranked to authenticated;
+-- Supabase gives new tables a few extra powers by default; this table doesn't need them.
+revoke truncate, references, trigger on public.unranked from authenticated;
+revoke all on public.unranked from anon;

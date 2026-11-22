@@ -16,6 +16,36 @@ he names. When an item is built, move it to "Done" with the date.
 - **Idea:** a personal invite link (the app's address plus my code). A friend opens it, creates their own
   account, and the friend request to me is sent automatically. No typing codes. Free.
 
+### 9. Make playlists from my rankings and send them to my music app
+*Asked 2026-11-21.* Song Ranker builds playlists from my rankings (for example "My 90+ songs",
+"Nighttime driving", "Best of the 80s") and exports them to my streaming app.
+- **Free ways:** create the playlist directly in **Spotify** (same free-mode limit as above); an
+  **Apple Shortcut** that searches Apple Music and adds the songs to a new playlist; or a downloadable
+  list for a free transfer site to load into any service.
+- **Not free:** creating Apple Music playlists from inside the app ($99/year developer membership).
+- **Depends on:** #8 (built 2026-11-22). Josh listens on YouTube Music.
+
+## Done
+
+**Built 2026-11-22 (v13):**
+- #8 Music library to an "Unranked" list: **Unranked** tab with Rank the next one / Rank / Skip / Remove,
+  and an **Import songs** window (paste a list, or a file from Exportify for Spotify, Apple Music on a Mac,
+  Google Takeout for YouTube Music, or a transfer site like TuneMyMusic), with a short guide for each.
+  Songs already ranked are left out; ranking a song takes it off the list. Tested with Josh's real
+  YouTube Music library file (59 songs: 46 added, 13 already ranked). Takeout only includes songs saved to
+  the library, not likes or playlists; a transfer site covers those. The iPhone Apple Music Shortcut was set
+  aside, since Josh uses YouTube Music. Spotify direct connection not built (free mode only works for a few
+  hand-added people).
+
+**Built 2026-11-20 (v5):**
+- #1 Who's who: initials icons next to every score, a "You · Name" key in Compare.
+- #2 More songs: Deezer (then MusicBrainz) results added under Apple's, plus "Add it yourself".
+- #3 "What song is this?": dropped 2026-11-20 to keep the app free; the search window points to Shazam instead.
+- #4 Ranking dates and taste over time: every score is kept with its date, "Ranked on…" on each song,
+  a nudge after 6 months, and a "Taste over time" card on My taste.
+- #5 How to rank: guide page, live tier name on the slider, new songs start at 50.
+
+<details><summary>The original requests</summary>
 ### 8. Bring in my music library as an "Unranked" list (the big one)
 *Asked 2026-11-21.* Export the songs from my music app into Song Ranker, where they wait in an
 "Unranked songs" queue, so it's easy to rank all my music.
@@ -31,26 +61,6 @@ he names. When an item is built, move it to "Done" with the date.
     ($99/year). YouTube Music has no official way to read your library.
 - **To decide:** which music app(s) to support first.
 
-### 9. Make playlists from my rankings and send them to my music app
-*Asked 2026-11-21.* Song Ranker builds playlists from my rankings (for example "My 90+ songs",
-"Nighttime driving", "Best of the 80s") and exports them to my streaming app.
-- **Free ways:** create the playlist directly in **Spotify** (same free-mode limit as above); an
-  **Apple Shortcut** that searches Apple Music and adds the songs to a new playlist; or a downloadable
-  list for a free transfer site to load into any service.
-- **Not free:** creating Apple Music playlists from inside the app ($99/year developer membership).
-- **Depends on:** #8's choice of music app.
-
-## Done
-
-**Built 2026-11-20 (v5):**
-- #1 Who's who: initials icons next to every score, a "You · Name" key in Compare.
-- #2 More songs: Deezer (then MusicBrainz) results added under Apple's, plus "Add it yourself".
-- #3 "What song is this?": dropped 2026-11-20 to keep the app free; the search window points to Shazam instead.
-- #4 Ranking dates and taste over time: every score is kept with its date, "Ranked on…" on each song,
-  a nudge after 6 months, and a "Taste over time" card on My taste.
-- #5 How to rank: guide page, live tier name on the slider, new songs start at 50.
-
-<details><summary>The original requests</summary>
 ### 1. Show who's who when comparing scores
 *Asked 2026-11-19.* In **Compare**, each song shows two scores side by side with nothing saying which is mine
 and which is my friend's. Put a picture or icon above or next to each score.

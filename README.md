@@ -51,6 +51,13 @@ address and type your code. You accept their request, and then **Compare** shows
 - **Discover:** songs they love that you haven't ranked, with a preview to play,
 - your favorites they haven't ranked yet.
 
+## Bringing in your music library
+
+**Unranked → Import songs** takes a pasted list ("Song – Artist", one per line) or a file: Spotify through
+the free site exportify.net, Apple Music on a Mac (File → Library → Export Playlist), YouTube Music through
+Google Takeout (`music library songs.csv`), or any app through a free transfer site like TuneMyMusic.
+Songs wait in the Unranked list; **Rank** finds each one in the catalog when you get to it.
+
 ## Files
 
 | File | What it does |
@@ -59,6 +66,7 @@ address and type your code. You accept their request, and then **Compare** shows
 | `js/app.js` | Screens and buttons |
 | `js/itunes.js` | Song search |
 | `js/stats.js` | Favorite decade/genre math and friend comparisons |
+| `js/importer.js` | Reads pasted lists and music-app files for the Unranked list |
 | `js/store.js` | Saving: practice mode or Supabase |
 | `supabase/setup.sql` | Database tables and who-can-see-what rules |
 | `config.js` | Your Supabase address and public key |
