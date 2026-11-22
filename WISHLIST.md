@@ -9,6 +9,13 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Done
 
+**Built 2026-11-22 (v19):**
+- #14 iPhone Duo half-open: Safari doesn't report the fold (checked with check.html), so the app finds it from the
+  inside screen's size. **Held tall:** the two columns stack, one above the fold and one below, each scrolling on
+  its own; the rating window keeps the song and big score above the fold and the slider, moments and Save below.
+  **Held wide:** the columns already split at the fold; windows now open in the right half instead of across it.
+  Tuned for the Home Screen app (in Safari the toolbar moves the fold up the page).
+
 **Built 2026-11-22 (v18):**
 - #13 Different views for My songs: a switcher next to the song count with **List** (as before), **Compact** (one
   thin line per song), **Grid** (big covers with the score in the corner; songs without a cover get a tile in their

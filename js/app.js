@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=18';
-import { searchSongs } from './itunes.js?v=18';
+import { createStore, isDemo } from './store.js?v=19';
+import { searchSongs } from './itunes.js?v=19';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=18';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=18';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=18';
+} from './stats.js?v=19';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=19';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=19';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -160,8 +160,39 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.profile')) c
 
 // Wide screens (an unfolded iPhone Duo, a tablet, a computer) show two columns:
 // My songs on the left, My taste or Friends on the right. Folding switches back.
-const wideScreen = matchMedia('(min-width: 700px)');
+// v19: the iPhone Duo's inside screen. Safari doesn't tell pages where the fold is (checked 2026-11-22), so it's
+// found from the screen size: held wide (about 951 × 669) the fold runs down the middle; held tall (about
+// 669 × 951) it runs across the middle. Held tall, the two columns stack above and below the fold.
+const DUO_TALL_Q = '(min-width: 640px) and (max-width: 699px) and (min-height: 700px)';
+const duoTall = matchMedia(DUO_TALL_Q);
+const duoWide = matchMedia('(min-width: 900px) and (max-width: 1000px) and (max-height: 700px)');
+const wideScreen = matchMedia(`(min-width: 700px), ${DUO_TALL_Q}`);
 wideScreen.addEventListener('change', () => { if (state.uid) render(); });
+const DUO_LONG = 951;
+// Where the fold falls on the page when held tall. Safari's toolbars sit above the page, so the page's top is
+// that much below the screen's top; the Home Screen app fills the screen and the fold is simply the middle.
+const foldY = () => { const screenH = Math.max(innerHeight, DUO_LONG); return Math.round(screenH / 2 - (screenH - innerHeight)); };
+function fitFold() {
+  const root = document.documentElement;
+  root.classList.toggle('duo-tall', duoTall.matches);
+  root.classList.toggle('duo-wide', duoWide.matches);
+  const cols = document.querySelector('.cols');
+  const range = document.querySelector('.modal #score-range');
+  if (range) range.style.marginTop = '';
+  if (!duoTall.matches) { if (cols) cols.style.gridTemplateRows = ''; return; }
+  const y = foldY();
+  root.style.setProperty('--fold-y', `${y}px`);
+  // Top column ends 12 points above the fold, the gap sits on it, the bottom column starts 12 below.
+  if (cols) cols.style.gridTemplateRows = `${Math.max(140, Math.round(y - cols.getBoundingClientRect().top - 12))}px minmax(0, 1fr)`;
+  // Rating window: song and big score above the fold, the slider and everything after it below.
+  if (range) {
+    const top = range.getBoundingClientRect().top;
+    if (top < y + 16) range.style.marginTop = `${parseFloat(getComputedStyle(range).marginTop) + (y + 16 - top)}px`;
+  }
+}
+addEventListener('resize', fitFold);
+duoTall.addEventListener('change', fitFold);
+duoWide.addEventListener('change', fitFold);
 
 function mainView() {
   const wide = wideScreen.matches;
@@ -180,7 +211,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=18" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=19" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -861,6 +892,7 @@ function renderModal() {
     }
     renderResults();
   } else root.innerHTML = '';
+  fitFold();
 }
 
 function renderResults() {

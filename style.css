@@ -178,8 +178,8 @@ label.grow { flex: 1; }
 .center-row { justify-content: center; }
 .shazam-tip { text-align: center; margin: 6px 0 0; }
 
-/* v8: two columns on wide screens (an unfolded iPhone Duo, tablets, computers) */
-@media (min-width: 700px) {
+/* v8: two columns on wide screens (an unfolded iPhone Duo, tablets, computers); v19: also the Duo's inside screen held tall */
+@media (min-width: 700px), (min-width: 640px) and (max-width: 699px) and (min-height: 700px) {
   main, .top { max-width: 1180px; }
   main { padding-left: 24px; padding-right: 24px; }
   .top { padding-left: 24px; padding-right: 24px; }
@@ -292,7 +292,7 @@ button[disabled] { opacity: .5; cursor: default; }
 /* v16: the iPhone Duo's front screen puts its clock, battery and Wi-Fi in a tall pill down the top-right
    corner. On phone-width screens, windows keep a clear strip there: the header row, song and Play preview
    button sit to the left of it, and text flows around it. */
-@media (max-width: 699px) {
+@media (max-width: 639px) {
   .overlay { --ov-top: max(24px, calc(env(safe-area-inset-top) + 12px)); padding-top: var(--ov-top); }
   .play-btn { width: calc(100% - 60px); }
   .modal::before { content: ""; float: right; width: 52px; height: calc(170px - var(--ov-top)); margin: -16px -10px 0 8px; }
@@ -348,3 +348,12 @@ button.wide { display: block; width: 100%; }
 .tier-row .cover-wrap .score { min-width: 30px; height: 24px; font-size: .75rem; right: 4px; bottom: 4px; }
 @media (max-width: 440px) { .grid { grid-template-columns: repeat(2, 1fr); } }
 .seg.layouts { margin: 0; }
+
+/* v19: the iPhone Duo's inside screen, half-open. Held tall, the columns stack: one above the fold, one below
+   (app.js sets the top row's height from where the fold falls). Held wide, the columns already split at the fold,
+   and windows open in the right half instead of across it. */
+html.duo-tall main, html.duo-tall .top { max-width: none; }
+html.duo-tall .cols { grid-template-columns: minmax(0, 1fr); row-gap: 24px; }
+html.duo-tall .wide-top { grid-template-columns: auto minmax(200px, 300px) auto; justify-content: space-between; }
+html.duo-wide .overlay { justify-content: flex-end; padding-left: calc(50% + 16px); padding-right: max(16px, env(safe-area-inset-right)); }
+html.duo-wide .modal { max-width: none; }
