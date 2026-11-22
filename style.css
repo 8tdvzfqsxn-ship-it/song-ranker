@@ -258,7 +258,7 @@ button[disabled] { opacity: .5; cursor: default; }
 .how a { color: var(--accent); }
 
 /* v14: preview button (#10), sharing (#6), playlists (#9) and For you (#11) */
-.overlay { padding-top: max(6vh, calc(env(safe-area-inset-top) + 16px)); }
+.overlay { padding-top: max(72px, 6vh, calc(env(safe-area-inset-top) + 20px)); } /* v15: a fixed floor, since the Duo front screen may not report its status bar */
 .play-btn { display: block; width: 100%; margin: 4px 0 6px; padding: 10px 14px; font-weight: 600; }
 .profile-menu .link { display: block; text-align: left; padding: 6px 0; }
 .profile-menu .code-copy { color: var(--muted); }
