@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Fold check</title>
+<style>
+  /* A one-off page: shows what this phone tells web pages about its screen and hinge. Not part of the app. */
+  :root { color-scheme: light; --line: rgba(108, 60, 240, .18); }
+  html, body { margin: 0; height: 100%; font: 15px/1.35 -apple-system, Helvetica, sans-serif; color: #1c1a24; background: #fff; }
+  /* Ruler: a line every 50 points down and across, numbered, so a screenshot shows where the fold falls. */
+  #ruler { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  #ruler i { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); font: 10px monospace; color: #9a8fd0; font-style: normal; padding-left: 2px; }
+  #ruler b { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); font: 10px monospace; color: #9a8fd0; font-weight: normal; padding-top: 2px; }
+  .seg { position: fixed; border: 3px dashed #e0245e; border-radius: 10px; z-index: 1; pointer-events: none; }
+  .seg span { position: absolute; top: 4px; left: 6px; background: #e0245e; color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+  main { position: relative; z-index: 2; max-width: 420px; margin: 0 auto;
+    padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); }
+  h1 { font-size: 1.3rem; margin: 0 0 4px; }
+  p { margin: 0 0 10px; color: #555; }
+  table { width: 100%; border-collapse: collapse; background: rgba(255, 255, 255, .92); border-radius: 10px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td:first-child { color: #666; width: 46%; }
+  td:last-child { font-weight: 600; word-break: break-word; }
+  .yes { color: #138a36; } .no { color: #b3261e; }
+  #probe { position: fixed; visibility: hidden;
+    left: env(viewport-segment-left 0 0, -1px); top: env(viewport-segment-top 0 0, -1px);
+    width: env(viewport-segment-width 0 0, 0px); height: env(viewport-segment-height 0 0, 0px); }
+  #probe2 { position: fixed; visibility: hidden;
+    left: env(viewport-segment-left 0 1, env(viewport-segment-left 1 0, -1px)); top: env(viewport-segment-top 0 1, env(viewport-segment-top 1 0, -1px));
+    width: env(viewport-segment-width 0 1, env(viewport-segment-width 1 0, 0px)); height: env(viewport-segment-height 0 1, env(viewport-segment-height 1 0, 0px)); }
+  #insets { position: fixed; visibility: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+</style>
+</head>
+<body>
+<div id="ruler"></div>
+<div id="segs"></div>
+<div id="probe"></div><div id="probe2"></div><div id="insets"></div>
+<main>
+  <h1>Fold check</h1>
+  <p>Open this with the phone half-open, the way you'd like to use Song Ranker, and take a screenshot. Then try it held the
+    other way (fold across or up and down) and take another. The numbers update by themselves.</p>
+  <table id="out"></table>
+</main>
+<script>
+const out = document.getElementById('out');
+const mq = (q) => matchMedia(q).matches;
+const rectOf = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return r.width ? `${Math.round(r.left)},${Math.round(r.top)} · ${Math.round(r.width)}×${Math.round(r.height)}` : 'none'; };
+function draw() {
+  const vp = window.viewport;
+  const jsSegs = vp && vp.segments ? [...vp.segments] : null;
+  const posture = navigator.devicePosture ? navigator.devicePosture.type : null;
+  const ins = getComputedStyle(document.getElementById('insets'));
+  const rows = [
+    ['Screen area (points)', `${innerWidth} × ${innerHeight}`],
+    ['Whole screen', `${screen.width} × ${screen.height}`],
+    ['Pixel density', devicePixelRatio],
+    ['Held', screen.orientation ? screen.orientation.type : (innerWidth > innerHeight ? 'sideways' : 'upright')],
+    ['Posture reported', posture ? posture : 'not supported', posture ? 'yes' : 'no'],
+    ['Posture "folded" (CSS)', mq('(device-posture: folded)') ? 'yes' : 'no'],
+    ['Two halves side by side', mq('(horizontal-viewport-segments: 2)') ? 'yes' : 'no', mq('(horizontal-viewport-segments: 2)') ? 'yes' : ''],
+    ['Two halves top and bottom', mq('(vertical-viewport-segments: 2)') ? 'yes' : 'no', mq('(vertical-viewport-segments: 2)') ? 'yes' : ''],
+    ['Halves (script)', jsSegs ? jsSegs.map((s) => `${Math.round(s.x)},${Math.round(s.y)} ${Math.round(s.width)}×${Math.round(s.height)}`).join('  |  ') : 'not supported', jsSegs ? 'yes' : 'no'],
+    ['First half (CSS)', rectOf('probe')],
+    ['Second half (CSS)', rectOf('probe2')],
+    ['Safe edges (top right bottom left)', [ins.paddingTop, ins.paddingRight, ins.paddingBottom, ins.paddingLeft].map((v) => parseInt(v)).join(' ')],
+    ['Visible area', window.visualViewport ? `${Math.round(visualViewport.width)} × ${Math.round(visualViewport.height)}` : '—'],
+    ['Opened from', mq('(display-mode: standalone)') || navigator.standalone ? 'Home Screen app' : 'browser'],
+    ['Browser', navigator.userAgent],
+  ];
+  out.innerHTML = rows.map(([k, v, c]) => `<tr><td>${k}</td><td class="${c || ''}">${String(v).replace(/</g, '&lt;')}</td></tr>`).join('');
+  // Outline each half the phone reports, so the screenshot shows them.
+  const segs = jsSegs && jsSegs.length > 1 ? jsSegs : null;
+  document.getElementById('segs').innerHTML = segs ? segs.map((s, i) => `<div class="seg" style="left:${s.x}px;top:${s.y}px;width:${s.width}px;height:${s.height}px"><span>Half ${i + 1}</span></div>`).join('') : '';
+  const R = document.getElementById('ruler'); let h = '';
+  for (let y = 50; y < innerHeight; y += 50) h += `<i style="top:${y}px">${y}</i>`;
+  for (let x = 50; x < innerWidth; x += 50) h += `<b style="left:${x}px">${x}</b>`;
+  R.innerHTML = h;
+}
+draw();
+addEventListener('resize', draw);
+screen.orientation?.addEventListener('change', draw);
+navigator.devicePosture?.addEventListener('change', draw);
+setInterval(draw, 1500);
+</script>
+</body>
+</html>
