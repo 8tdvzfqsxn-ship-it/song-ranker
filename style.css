@@ -317,3 +317,34 @@ button[disabled] { opacity: .5; cursor: default; }
 .mk-sub { margin: 8px 0 4px; }
 .mk-count { margin: 14px 0 8px; min-height: 1.3em; }
 button.wide { display: block; width: 100%; }
+
+/* v18: My songs views: List, Compact, Grid and Tiers */
+.view-row { margin: 0 0 8px; gap: 8px; }
+.view-row p { margin: 0; }
+.seg.layouts { flex: none; }
+.seg.layouts button { padding: 6px 9px; font-size: .8rem; }
+.compact-list .song.compact { gap: 10px; padding: 6px 8px; }
+.song.compact .score { min-width: 34px; height: 26px; font-size: .82rem; border-radius: 8px; }
+.song.compact .title { flex: 0 1 auto; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.song.compact .muted { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 14px 12px; }
+.tile { cursor: pointer; min-width: 0; border-radius: 12px; padding: 4px; }
+.tile:hover { background: var(--chip); }
+.cover-wrap { position: relative; margin-bottom: 6px; }
+.cover { display: block; width: 100%; aspect-ratio: 1; border-radius: 10px; object-fit: cover; background: var(--chip); }
+.cover.ph { display: grid; place-items: center; font-size: 2.4rem; font-weight: 700; color: var(--c);
+  background: color-mix(in srgb, var(--c) 18%, var(--card)); }
+.cover-wrap .score { position: absolute; right: 6px; bottom: 6px; min-width: 36px; height: 28px; font-size: .85rem; border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+.tile .title, .tile .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .title { font-weight: 600; font-size: .92rem; }
+.tier-group { margin: 0 0 14px; }
+.tier-h { display: flex; align-items: center; gap: 10px; margin: 6px 0 8px; font-size: 1rem; }
+.tier-h .score { min-width: 64px; height: 28px; font-size: .8rem; }
+.tier-row { list-style: none; margin: 0; padding: 0 0 6px; display: flex; gap: 10px; overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity; }
+.tier-row .tile { flex: none; width: 110px; scroll-snap-align: start; }
+.tier-row .cover.ph { font-size: 1.8rem; }
+.tier-row .cover-wrap .score { min-width: 30px; height: 24px; font-size: .75rem; right: 4px; bottom: 4px; }
+@media (max-width: 440px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+.seg.layouts { margin: 0; }

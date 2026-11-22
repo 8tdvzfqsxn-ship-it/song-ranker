@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=17';
-import { searchSongs } from './itunes.js?v=17';
+import { createStore, isDemo } from './store.js?v=18';
+import { searchSongs } from './itunes.js?v=18';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=17';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=17';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=17';
+} from './stats.js?v=18';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=18';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=18';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -180,7 +180,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=17" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=18" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -258,8 +258,53 @@ function libraryView() {
     <select data-filter="decade">${opt('', 'All decades', f.decade)}${decades.map((d) => opt(d, decadeLabel(d), f.decade)).join('')}</select>
     <select data-filter="sort">${opt('score', 'Highest first', f.sort)}${opt('low', 'Lowest first', f.sort)}${opt('recent', 'Recently ranked', f.sort)}${opt('oldest', 'Longest since ranked', f.sort)}${opt('year', 'Oldest songs first', f.sort)}</select>
   </div>
-  <p class="muted small">${list.length} of ${all.length} songs</p>
-  <ul class="songs">${list.map((r) => songRow(r, { showDate: true })).join('') || '<li class="empty">Nothing matches those filters.</li>'}</ul>`;
+  <div class="row between view-row">
+    <p class="muted small">${list.length} of ${all.length} songs</p>
+    <div class="seg layouts" role="group" aria-label="How to show my songs">${LAYOUTS.map(([v, label]) =>
+      `<button class="${layout() === v ? 'on' : ''}" data-action="set-layout" data-layout="${v}" title="${label}" aria-label="${label}" aria-pressed="${layout() === v}">${label}</button>`).join('')}</div>
+  </div>
+  ${list.length ? songsIn(list) : '<ul class="songs"><li class="empty">Nothing matches those filters.</li></ul>'}`;
+}
+
+// v18: four ways to show My songs. The choice is remembered on this device.
+const LAYOUTS = [['list', 'List'], ['compact', 'Compact'], ['grid', 'Grid'], ['tiers', 'Tiers']];
+const layout = () => (state.layout ??= LAYOUTS.some(([v]) => v === lsGet('songrank-layout')) ? lsGet('songrank-layout') : 'list');
+const bigArt = (url) => url?.replace('200x200', '400x400');
+// A cover, or a tile tinted with the song's score color showing the title's first letter.
+const tileArt = (r) => {
+  const letter = esc((r.title || '♪').replace(/^[^\p{L}\p{N}]+/u, '').charAt(0).toUpperCase() || '♪');
+  const ph = `<div class="cover ph" style="--c:${scoreColor(r.score)}">${letter}</div>`;
+  return r.artwork_url
+    ? `<img class="cover" src="${esc(bigArt(r.artwork_url))}" alt="" loading="lazy" onerror="this.outerHTML=this.nextElementSibling.innerHTML"><template>${ph}</template>`
+    : ph;
+};
+const tile = (r) => `
+  <li class="tile clickable" data-action="edit" data-id="${esc(r.song_id)}" title="${esc(`${r.title} – ${r.artist}`)}">
+    <div class="cover-wrap">${tileArt(r)}${scoreBadge(r.score)}</div>
+    <div class="title">${esc(r.title)}</div>
+    <div class="muted small">${esc(r.artist)}</div>
+  </li>`;
+const compactRow = (r) => `
+  <li class="song compact clickable" data-action="edit" data-id="${esc(r.song_id)}">
+    ${scoreBadge(r.score)}
+    <span class="title">${esc(r.title)}</span>
+    <span class="muted small">${esc(r.artist)}</span>
+  </li>`;
+function songsIn(list) {
+  const v = layout();
+  if (v === 'compact') return `<ul class="songs compact-list">${list.map(compactRow).join('')}</ul>`;
+  if (v === 'grid') return `<ul class="grid">${list.map(tile).join('')}</ul>`;
+  if (v === 'tiers') {
+    return TIERS.map((t) => {
+      const songs = list.filter((r) => tierOf(r.score) === t);
+      if (!songs.length) return '';
+      return `<section class="tier-group">
+        <h3 class="tier-h">${scoreBadge(t.max, t.name).replace(`>${t.max}<`, `>${t.min}–${t.max}<`)}<span>${esc(t.name)}</span><span class="muted small">${songs.length}</span></h3>
+        <ul class="tier-row">${songs.map(tile).join('')}</ul>
+      </section>`;
+    }).join('');
+  }
+  return `<ul class="songs">${list.map((r) => songRow(r, { showDate: true })).join('')}</ul>`;
 }
 
 // Songs brought in from a music library, waiting their turn. Oldest first; Skip sends one to the back.
@@ -1177,6 +1222,7 @@ document.addEventListener('click', (e) => {
     }
     case 'manual-back': { const term = state.queueItem ? searchTermFor(state.queueItem) : state.manual?.title || ''; state.manual = null; openSearch(term); break; }
     case 'toggle-stale': state.filters.stale = !state.filters.stale; render(); break;
+    case 'set-layout': state.layout = el.dataset.layout; lsSet('songrank-layout', state.layout); render(); break;
     case 'toggle-tag': {
       const t = el.dataset.tag;
       state.rating.tags.has(t) ? state.rating.tags.delete(t) : state.rating.tags.add(t);

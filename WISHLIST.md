@@ -9,6 +9,12 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Done
 
+**Built 2026-11-22 (v18):**
+- #13 Different views for My songs: a switcher next to the song count with **List** (as before), **Compact** (one
+  thin line per song), **Grid** (big covers with the score in the corner; songs without a cover get a tile in their
+  score color with the title's first letter) and **Tiers** (songs grouped under the guide's tier names, each tier a
+  sideways-scrolling row). Filters and sorting work in every view; the choice is remembered on each device.
+
 **Built 2026-11-22 (v17):**
 - #12 Two playlist makers, on My taste → Playlists:
   - **＋ Make a playlist** (from my rankings): score range, moments, decades, genres, how many songs (10, 25,
