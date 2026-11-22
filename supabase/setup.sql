@@ -196,3 +196,32 @@ grant select, insert, update, delete on public.unranked to authenticated;
 -- Supabase gives new tables a few extra powers by default; this table doesn't need them.
 revoke truncate, references, trigger on public.unranked from authenticated;
 revoke all on public.unranked from anon;
+
+-- ---------------------------------------------------------------- saved playlists (added 2026-11-22)
+-- Playlists made with "Make a playlist" or "Discover" and saved. Only you can see or change yours.
+create table if not exists public.playlists (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  name text not null check (char_length(name) between 1 and 80),
+  kind text not null default 'mine' check (kind in ('mine', 'discover')),
+  songs jsonb not null default '[]' check (jsonb_typeof(songs) = 'array' and jsonb_array_length(songs) <= 500),
+  settings jsonb not null default '{}',
+  created_at timestamptz not null default now()
+);
+create index if not exists playlists_user_created on public.playlists (user_id, created_at);
+alter table public.playlists enable row level security;
+drop policy if exists "see own playlists" on public.playlists;
+create policy "see own playlists" on public.playlists for select to authenticated
+  using (user_id = auth.uid());
+drop policy if exists "add own playlists" on public.playlists;
+create policy "add own playlists" on public.playlists for insert to authenticated
+  with check (user_id = auth.uid());
+drop policy if exists "change own playlists" on public.playlists;
+create policy "change own playlists" on public.playlists for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+drop policy if exists "remove own playlists" on public.playlists;
+create policy "remove own playlists" on public.playlists for delete to authenticated
+  using (user_id = auth.uid());
+grant select, insert, update, delete on public.playlists to authenticated;
+revoke truncate, references, trigger on public.playlists from authenticated;
+revoke all on public.playlists from anon;

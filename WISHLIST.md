@@ -9,6 +9,17 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Done
 
+**Built 2026-11-22 (v17):**
+- #12 Two playlist makers, on My taste → Playlists:
+  - **＋ Make a playlist** (from my rankings): score range, moments, decades, genres, how many songs (10, 25,
+    50, about an hour, all), highest first or shuffled. Shows how many songs match as you pick.
+  - **Discover**: start from all my 80+ songs, one moment, one genre or one decade; "Close to what I like" or
+    "Further out" (artists like the ones similar to my favorites). New songs from Deezer with preview, Rank,
+    Save for later and Not for me.
+  - Either result can be named and **saved**; saved playlists sync to my account (a `playlists` table) and
+    have the same Download file / Copy list / Share buttons. Ranking a song from a saved Discover list keeps
+    it in the list with my score.
+
 **Built 2026-11-22 (v14):**
 - #6 Share my friend code: **Share invite** opens the phone's share sheet; the code in the profile menu copies with a tap.
 - #7 Invite links: the invite is a link with the friend code in it. A friend who opens it and makes an account
@@ -41,6 +52,14 @@ he names. When an item is built, move it to "Done" with the date.
 - #5 How to rank: guide page, live tier name on the slider, new songs start at 50.
 
 <details><summary>The original requests</summary>
+### 12. Make my own playlists, and discover from a starting point
+1. From my rankings: choose a score range (e.g. 75–100), moments, decades, genres, and a length (number of
+   songs, or about an hour); highest-first or shuffled; then Generate. Name it, save it, and send it to
+   YouTube Music like the other playlists.
+2. Discover: choose a starting point (all my 80+ songs, one moment like "Road trip", or one genre or decade)
+   and how adventurous (close to what I like, or further out). New songs with preview, Rank, Save for later
+   and Not for me, and the same send-to-music-app buttons. Free, no new accounts or keys.
+
 ### 6. Share my friend code easily
 *Asked 2026-11-21.* Copy my code and send it to others.
 - **Today:** Friends → "Copy invite" copies a link plus the code; the code also shows in the profile menu.

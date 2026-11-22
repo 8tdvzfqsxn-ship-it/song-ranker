@@ -65,6 +65,15 @@ Deezer's free catalog (artists related to your favorites, and their top songs). 
 For you, can be downloaded as a file; the free site TuneMyMusic turns it into a YouTube Music (or any app)
 playlist.
 
+Two more buttons there make playlists on demand:
+- **＋ Make a playlist** picks from your own rankings: a score range, moments, decades, genres, how many songs,
+  and highest first or shuffled.
+- **Discover** finds new songs starting from all your 80+ songs, one moment, one genre or one decade, either
+  close to what you like or further out (artists like the ones similar to your favorites).
+
+Name a result and **Save** it to keep it; saved playlists are stored with your account (`playlists` table in
+`supabase/setup.sql`), so they show up on every device.
+
 ## Files
 
 | File | What it does |
@@ -74,7 +83,7 @@ playlist.
 | `js/itunes.js` | Song search |
 | `js/stats.js` | Favorite decade/genre math and friend comparisons |
 | `js/importer.js` | Reads pasted lists and music-app files for the Unranked list |
-| `js/recommend.js` | "For you" suggestions from Deezer's free catalog |
+| `js/recommend.js` | "For you" and "Discover" suggestions from Deezer's free catalog |
 | `js/store.js` | Saving: practice mode or Supabase |
 | `supabase/setup.sql` | Database tables and who-can-see-what rules |
 | `config.js` | Your Supabase address and public key |

@@ -1,7 +1,7 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
 // Practice mode leaves out the extras that need a server, like the other catalogs.
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=16';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=17';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
@@ -12,6 +12,14 @@ const pickUnranked = (r) => Object.fromEntries(UNRANKED_FIELDS.map((f) => [f, r[
 // The Unranked list is a queue: oldest first. Imports get one millisecond apart so they keep their order.
 const stamp = (rows) => { const t = Date.now(); return rows.map((r, i) => ({ ...pickUnranked(r), added_at: new Date(t + i).toISOString() })); };
 const byAdded = (a, b) => a.added_at.localeCompare(b.added_at);
+// Saved playlists keep a copy of each song's details, so they open the same way every time.
+const PL_SONG_FIELDS = ['song_id', 'title', 'artist', 'album', 'artwork_url', 'preview_url', 'because'];
+const pickPlaylist = (p) => ({
+  name: String(p.name || 'My playlist').slice(0, 80),
+  kind: p.kind === 'discover' ? 'discover' : 'mine',
+  songs: (p.songs || []).slice(0, 500).map((x) => Object.fromEntries(PL_SONG_FIELDS.map((f) => [f, x[f] ?? null]))),
+  settings: p.settings || {},
+});
 const chunks = (xs, n) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 function groupFriends(rows, profiles, uid) {
@@ -40,6 +48,7 @@ function demoStore() {
   if (!db) db = seed();
   db.history ||= {};
   db.unranked ||= {};
+  db.playlists ||= {};
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* private window */ } };
   const code = () => Math.random().toString(16).slice(2, 8).toUpperCase();
   let uid = db.session;
@@ -88,6 +97,17 @@ function demoStore() {
       save();
     },
     async clearUnranked() { db.unranked[uid] = []; save(); },
+    // Playlists made with "Make a playlist" or "Discover" and saved, newest first.
+    async playlists() { return [...(db.playlists[uid] || [])].sort((a, b) => b.created_at.localeCompare(a.created_at)); },
+    async savePlaylist(p) {
+      const list = (db.playlists[uid] ||= []);
+      const i = p.id ? list.findIndex((x) => x.id === p.id) : -1;
+      const row = { ...pickPlaylist(p), id: p.id || `pl-${Date.now()}`, created_at: i >= 0 ? list[i].created_at : new Date().toISOString() };
+      if (i >= 0) list[i] = row; else list.push(row);
+      save();
+      return row;
+    },
+    async deletePlaylist(id) { db.playlists[uid] = (db.playlists[uid] || []).filter((x) => x.id !== id); save(); },
     // Skip = to the back of the line.
     async skipUnranked(id) {
       const x = (db.unranked[uid] || []).find((r) => r.id === id);
@@ -219,6 +239,17 @@ async function supabaseStore() {
       for (const part of chunks(ids, 100)) ok(await sb.from('unranked').delete().eq('user_id', uid).in('id', part));
     },
     async clearUnranked() { ok(await sb.from('unranked').delete().eq('user_id', uid)); },
+    // Saved playlists (supabase/setup.sql: playlists), newest first.
+    async playlists() {
+      return ok(await sb.from('playlists').select('id, name, kind, songs, settings, created_at').eq('user_id', uid).order('created_at', { ascending: false }));
+    },
+    async savePlaylist(p) {
+      const row = { ...pickPlaylist(p), user_id: uid };
+      return p.id
+        ? ok(await sb.from('playlists').update(row).eq('user_id', uid).eq('id', p.id).select().single())
+        : ok(await sb.from('playlists').insert(row).select().single());
+    },
+    async deletePlaylist(id) { ok(await sb.from('playlists').delete().eq('user_id', uid).eq('id', id)); },
     async skipUnranked(id) {
       ok(await sb.from('unranked').update({ added_at: new Date().toISOString() }).eq('user_id', uid).eq('id', id));
     },

@@ -297,3 +297,23 @@ button[disabled] { opacity: .5; cursor: default; }
   .play-btn { width: calc(100% - 60px); }
   .modal::before { content: ""; float: right; width: 52px; height: calc(170px - var(--ov-top)); margin: -16px -10px 0 8px; }
 }
+
+/* v17: Make a playlist and Discover (#12) */
+.pl-make { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin: 0 0 8px; }
+.pl-make button { min-width: 0; white-space: normal; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px; }
+.pl-make .small { font-weight: 400; line-height: 1.25; }
+@media (max-width: 420px) { .pl-make { grid-template-columns: 1fr; } }
+.pl-list + h3, .pl-make + h3 { margin-top: 10px; }
+.pl-name { margin: 8px 0 2px; }
+.pl-name input { flex: 1; min-width: 0; }
+.pl-name button { flex: none; }
+.modal.maker h3 { margin: 14px 0 6px; }
+.modal.maker .seg { margin: 4px 0; }
+.modal.maker .seg button { font-size: .88rem; }
+.modal.maker .tags { gap: 6px; }
+.mk-scores { flex-wrap: wrap; }
+.mk-scores label { display: flex; align-items: center; gap: 6px; }
+.mk-scores select { width: auto; }
+.mk-sub { margin: 8px 0 4px; }
+.mk-count { margin: 14px 0 8px; min-height: 1.3em; }
+button.wide { display: block; width: 100%; }

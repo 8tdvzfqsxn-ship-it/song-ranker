@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=16';
-import { searchSongs } from './itunes.js?v=16';
+import { createStore, isDemo } from './store.js?v=17';
+import { searchSongs } from './itunes.js?v=17';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=16';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=16';
-import { buildForYou, freshPreviews } from './recommend.js?v=16';
+} from './stats.js?v=17';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=17';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=17';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -39,6 +39,10 @@ const state = {
   playlist: null,    // { name, kind, songs } while a playlist is open
   forYou: null,      // { at, songs } the latest "For you" list
   forYouBusy: null,  // progress text while it's being built
+  saved: [],         // playlists I made and saved (#12)
+  savedOk: true,     // false when the live database doesn't have the playlists table yet
+  maker: null,       // the "Make a playlist" / "Discover" window: { mode, ...choices, busy }
+  returnTo: null,    // the playlist to go back to after ranking a song from it
   authMode: 'in',
   filters: { q: '', tag: '', genre: '', decade: '', sort: 'score', stale: false, uq: '' },
   friends: { accepted: [], incoming: [], outgoing: [] },
@@ -102,6 +106,7 @@ async function loadAll() {
   // A missing Unranked table (live database not updated yet) shouldn't stop the app.
   try { state.unranked = await store.unranked(); } catch { state.unranked = []; }
   loadForYou();
+  try { state.saved = await store.playlists(); state.savedOk = true; } catch { state.saved = []; state.savedOk = false; }
 }
 
 // ---------------------------------------------------------------- rendering
@@ -175,7 +180,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=16" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=17" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -367,6 +372,14 @@ function playlistsCard() {
         ? `<div class="row"><button class="primary" data-action="open-playlist" data-id="foryou">Open</button><button data-action="fy-build" title="Find a fresh set">↻</button></div>`
         : `<button class="primary" data-action="fy-build">Find new music</button>`}
     </div>
+    <div class="pl-make">
+      <button data-action="maker-open" data-mode="mine"><b>＋ Make a playlist</b><span class="muted small">From your rankings: scores, moments, decades, genres</span></button>
+      <button data-action="maker-open" data-mode="discover"><b>Discover</b><span class="muted small">New songs, starting from a moment, genre or decade</span></button>
+    </div>
+    ${state.saved.length ? `<h3>Saved</h3><ul class="people pl-list">${state.saved.map((l) => `
+      <li class="person clickable" data-action="open-playlist" data-id="s:${esc(l.id)}">
+        <span>${esc(l.name)}${l.kind === 'discover' ? ' <span class="chip sm">Discover</span>' : ''}</span><span class="muted small">${l.songs.length} song${l.songs.length === 1 ? '' : 's'} ›</span>
+      </li>`).join('')}</ul><h3>Made from your rankings</h3>` : ''}
     <ul class="people pl-list">${lists.map((l) => `
       <li class="person clickable" data-action="open-playlist" data-id="${esc(l.id)}">
         <span>${esc(l.name)}</span><span class="muted small">${l.songs.length} song${l.songs.length === 1 ? '' : 's'} ›</span>
@@ -388,6 +401,19 @@ function openPlaylist(id) {
         if (state.playlist?.kind === 'foryou' && !playingUrl) renderModal();
       }).catch(() => {});
     }
+  } else if (id.startsWith('s:')) {
+    const row = state.saved.find((x) => x.id === id.slice(2));
+    if (!row) return;
+    state.playlist = { id, savedId: row.id, name: row.name, kind: 'saved', discover: row.kind === 'discover', settings: row.settings, songs: row.songs };
+    // Preview links from Deezer expire, so a saved list gets fresh ones when it opens.
+    const pl = state.playlist;
+    if (pl.songs.some((x) => x.song_id?.startsWith('dz:'))) {
+      freshPreviews(pl.songs).then((songs) => {
+        if (state.playlist !== pl) return;
+        pl.songs = songs;
+        if (!playingUrl) renderModal();
+      }).catch(() => {});
+    }
   } else {
     const l = myPlaylists().find((x) => x.id === id);
     if (!l) return;
@@ -401,8 +427,18 @@ function playlistModal() {
   const fy = pl.kind === 'foryou';
   // For you leaves out anything ranked or saved since it was made.
   const done = new Set([...state.ratings, ...state.unranked].map(songKey));
-  const songs = fy ? (state.forYou?.songs || []).filter((x) => !done.has(songKey(x))) : pl.songs;
+  const songs = fy ? (state.forYou?.songs || []).filter((x) => !done.has(songKey(x)))
+    : pl.kind === 'new' && pl.discover ? pl.songs.filter((x) => !done.has(songKey(x))) : pl.songs;
   pl.songs = songs;
+  // A new song (from Deezer) not ranked yet gets preview, Rank, save and Not for me; anything ranked shows my score.
+  const row = (x) => {
+    if (fy) return fyRow(x);
+    const mine = findMine(x);
+    if (mine) return songRow(mine, { clickable: false });
+    if (x.song_id?.startsWith('dz:')) return fyRow(x);
+    return songRow(x, { clickable: false, right: '<span></span>' });
+  };
+  const canSave = pl.kind === 'new';
   const fyRow = (x) => `
     <li class="song fy">
       <button class="art-btn" ${x.preview_url ? `data-action="preview" data-url="${esc(x.preview_url)}"` : 'disabled'} title="Play a preview" aria-label="Play a preview of ${esc(x.title)}">
@@ -421,11 +457,17 @@ function playlistModal() {
   return `
   <div class="overlay" data-action="close-modal-bg">
     <div class="modal playlist" role="dialog" aria-label="${esc(pl.name)}">
-      <div class="row between"><h2>${esc(pl.name)}</h2><button class="link" data-action="close-playlist">Done</button></div>
+      <div class="row between"><h2>${canSave ? (pl.discover ? 'New songs for you' : 'Your new playlist') : esc(pl.name)}</h2><button class="link" data-action="close-playlist">${canSave ? 'Close' : 'Done'}</button></div>
+      ${canSave ? `
+      <div class="row pl-name"><input id="pl-name" maxlength="80" value="${esc(pl.name)}" aria-label="Playlist name">
+        <button class="primary" data-action="pl-save">Save</button></div>
+      <p class="tiny muted">${state.savedOk ? 'Saved playlists show up under My taste on all your devices.' : ''}
+        <button class="link" data-action="pl-again">← Change the choices</button></p>` : ''}
+      ${pl.discover && !fy ? `<p class="muted small">Tap a cover to hear a preview. <b>Rank</b> it, <b>＋</b> save it to Unranked for later, or <b>✕</b> if it's not for you.</p>` : ''}
       ${fy ? `<p class="muted small">Songs from artists like your favorites, found in Deezer's free catalog. Tap a cover to hear a preview.
         <b>Rank</b> it, <b>＋</b> save it for later, or <b>✕</b> if it's not for you. Your scores teach it what to find next time.</p>` : ''}
       <p class="muted small">${songs.length} song${songs.length === 1 ? '' : 's'}</p>
-      <ul class="songs">${songs.map((x) => (fy ? fyRow(x) : songRow(x, { clickable: false }))).join('') || '<li class="empty">Nothing left here. Tap ↻ for a fresh set.</li>'}</ul>
+      <ul class="songs">${songs.map(row).join('') || `<li class="empty">${fy ? 'Nothing left here. Tap ↻ for a fresh set.' : 'Nothing left here.'}</li>`}</ul>
       ${songs.length ? `
       <h3>Put it in your music app</h3>
       <div class="row wrap pl-actions">
@@ -436,6 +478,7 @@ function playlistModal() {
       <p class="tiny muted">For YouTube Music (or any app): download the file, open the free site
         <a href="https://www.tunemymusic.com/transfer/file-to-youtube-music" target="_blank" rel="noopener">TuneMyMusic</a>,
         choose <b>File</b> as the source and upload it, then pick <b>YouTube Music</b> as the destination.</p>` : ''}
+      ${pl.kind === 'saved' ? `<p class="tiny"><button class="link danger-link-plain" data-action="pl-delete">Delete this playlist</button></p>` : ''}
     </div>
   </div>`;
 }
@@ -484,9 +527,13 @@ async function makeForYou() {
   }
 }
 
-// Take a song off For you. "Not for me" is remembered; two of those from one artist and it stops suggesting them.
+// The song a For you / Discover row is about.
+const plSong = (id) => (state.playlist?.songs || []).find((x) => x.song_id === id) || (state.forYou?.songs || []).find((x) => x.song_id === id);
+
+// Take a song off For you or a Discover list. "Not for me" is remembered; two of those from one artist
+// and it stops suggesting them. A saved playlist keeps songs saved for later, but drops "Not for me" ones.
 function dropForYou(id, nope) {
-  const song = (state.forYou?.songs || []).find((x) => x.song_id === id);
+  const song = plSong(id);
   if (!song) return;
   if (nope) {
     const n = loadNope();
@@ -495,9 +542,164 @@ function dropForYou(id, nope) {
     n.artists[a] = (n.artists[a] || 0) + 1;
     lsSet(nopeKey(), JSON.stringify(n));
   }
-  state.forYou.songs = state.forYou.songs.filter((x) => x.song_id !== id);
-  saveForYou();
+  if (state.forYou?.songs?.some((x) => x.song_id === id)) {
+    state.forYou.songs = state.forYou.songs.filter((x) => x.song_id !== id);
+    saveForYou();
+  }
+  const pl = state.playlist;
+  if (pl && pl.kind !== 'foryou' && (nope || pl.kind !== 'saved')) {
+    pl.songs = pl.songs.filter((x) => x.song_id !== id);
+    if (pl.kind === 'saved') act(async () => { await store.savePlaylist({ id: pl.savedId, name: pl.name, kind: pl.discover ? 'discover' : 'mine', songs: pl.songs, settings: pl.settings }); state.saved = await store.playlists(); });
+  }
   renderModal();
+}
+
+// ---------------------------------------------------------------- Make a playlist and Discover (#12)
+
+const REACH_HINT = {
+  close: 'Close: artists similar to your favorites.',
+  far: "Further out: artists similar to those, a step away from your favorites, so more you won't have heard of.",
+};
+const HOUR_SONGS = 16; // songs average about 3¾ minutes
+const LENGTHS = [['10', '10'], ['25', '25'], ['50', '50'], ['hour', '~1 hour'], ['all', 'All']];
+const shuffle = (xs) => { const a = [...xs]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+let makerPrefs = { mine: null, discover: null }; // the last choices, so "Change the choices" starts from them
+
+function openMaker(mode) {
+  closeProfileMenus();
+  state.maker = makerPrefs[mode] ? { ...makerPrefs[mode], busy: null }
+    : mode === 'mine'
+      ? { mode, min: 75, max: 100, tags: [], decades: [], genres: [], length: '25', order: 'top' }
+      : { mode, start: 'love', reach: 'close' };
+  renderModal();
+}
+
+// The songs from my rankings that fit the choices, best first.
+function makerMatches(m) {
+  const has = (list, v) => !list.length || list.includes(String(v));
+  return state.ratings
+    .filter((r) => r.score >= m.min && r.score <= m.max && has(m.decades, decadeOf(r.release_year)) && has(m.genres, r.genre)
+      && (!m.tags.length || (r.tags || []).some((t) => m.tags.includes(t))))
+    .sort((a, b) => b.score - a.score);
+}
+const makerSize = (m) => (m.length === 'hour' ? HOUR_SONGS : m.length === 'all' ? Infinity : +m.length);
+
+// What a Discover starting point means: which of my ranked songs it starts from, and its name.
+function discoverStart(start) {
+  const [kind, ...rest] = start.split(':');
+  const v = rest.join(':');
+  if (kind === 't') return { label: v, from: state.ratings.filter((r) => (r.tags || []).includes(v)) };
+  if (kind === 'g') return { label: v, from: state.ratings.filter((r) => r.genre === v) };
+  if (kind === 'd') return { label: decadeLabel(+v), from: state.ratings.filter((r) => String(decadeOf(r.release_year)) === v) };
+  return { label: 'Songs I love', from: state.ratings };
+}
+
+function makerModal() {
+  const m = state.maker;
+  const s = tasteStats(state.ratings);
+  const chips = (group, items, single = false) => `<div class="tags">${items.map(([v, label, n]) => {
+    const on = single ? m[group] === v : m[group].includes(v);
+    return `<button class="chip ${on ? 'on' : ''}" data-action="mk-chip" data-group="${group}" data-val="${esc(v)}" ${single ? 'data-single="1"' : ''}>${esc(label)}${n != null ? ` <span class="muted">${n}</span>` : ''}</button>`;
+  }).join('')}</div>`;
+  const seg = (key, opts) => `<div class="seg">${opts.map(([v, label]) =>
+    `<button class="${m[key] === v ? 'on' : ''}" data-action="mk-set" data-key="${key}" data-val="${v}">${label}</button>`).join('')}</div>`;
+  const tags = s.tags.map((t) => [t.name, t.name, t.count]);
+  const decades = [...s.decades].sort((a, b) => a.name - b.name).map((d) => [String(d.name), decadeLabel(d.name), d.count]);
+  const genres = s.genres.map((g) => [g.name, g.name, g.count]);
+  const scoreOpts = (sel) => Array.from({ length: 21 }, (_, i) => i * 5).map((n) => `<option ${n === sel ? 'selected' : ''}>${n}</option>`).join('');
+
+  const body = m.mode === 'mine' ? `
+      <p class="muted small">Pick what goes in from the songs you've ranked. Leave a group with nothing picked to include all of it.</p>
+      <h3>Scores</h3>
+      <div class="row mk-scores"><label>From <select id="mk-min">${scoreOpts(m.min)}</select></label>
+        <label>to <select id="mk-max">${scoreOpts(m.max)}</select></label></div>
+      ${tags.length ? `<h3>Moments</h3>${chips('tags', tags)}` : ''}
+      ${decades.length ? `<h3>Decades</h3>${chips('decades', decades)}` : ''}
+      ${genres.length ? `<h3>Genres</h3>${chips('genres', genres)}` : ''}
+      <h3>How many songs</h3>${seg('length', LENGTHS)}
+      <h3>Order</h3>${seg('order', [['top', 'Highest scores first'], ['shuffle', 'Shuffled']])}
+      <p class="small mk-count" id="mk-count"></p>
+      <button class="primary wide" data-action="maker-go">Make playlist</button>` : `
+      <p class="muted small">New songs you haven't ranked, from artists like the ones you score highest. Pick where to start.</p>
+      <h3>Start from</h3>
+      ${chips('start', [['love', 'All my 80+ songs', null]], true)}
+      ${tags.length ? `<p class="tiny muted mk-sub">A moment</p>${chips('start', tags.map(([v, l, n]) => [`t:${v}`, l, n]), true)}` : ''}
+      ${genres.length ? `<p class="tiny muted mk-sub">A genre</p>${chips('start', genres.map(([v, l, n]) => [`g:${v}`, l, n]), true)}` : ''}
+      ${decades.length ? `<p class="tiny muted mk-sub">A decade</p>${chips('start', decades.map(([v, l, n]) => [`d:${v}`, l, n]), true)}` : ''}
+      <h3>How adventurous</h3>${seg('reach', [['close', 'Close to what I like'], ['far', 'Further out']])}
+      <p class="tiny muted" id="mk-reach">${REACH_HINT[m.reach]}</p>
+      <p class="small mk-count" id="mk-count">${m.busy ? esc(m.busy) : ''}</p>
+      <button class="primary wide" data-action="maker-go" ${m.busy ? 'disabled' : ''}>${m.busy ? 'Finding songs…' : 'Find songs'}</button>`;
+  return `
+  <div class="overlay" data-action="close-modal-bg">
+    <div class="modal maker" role="dialog" aria-label="${m.mode === 'mine' ? 'Make a playlist' : 'Discover'}">
+      <div class="row between"><h2>${m.mode === 'mine' ? 'Make a playlist' : 'Discover'}</h2><button class="link" data-action="close-modal">Cancel</button></div>
+      ${body}
+    </div>
+  </div>`;
+}
+
+// Keeps "N songs match" current without redrawing the window (so it doesn't jump to the top).
+function updateMakerCount() {
+  const m = state.maker;
+  const el = $('#mk-count');
+  if (!m || m.mode !== 'mine' || !el) return;
+  const n = makerMatches(m).length;
+  const take = Math.min(n, makerSize(m));
+  el.innerHTML = n ? `<b>${n}</b> song${n === 1 ? '' : 's'} match${n === 1 ? 'es' : ''}${take < n ? `; the playlist takes ${m.order === 'top' ? 'the top' : 'a shuffled'} ${take}` : ''}.`
+    : `<span class="err">No songs match. Widen the scores or pick fewer moments, decades or genres.</span>`;
+}
+
+function mineName(m) {
+  const parts = [...m.tags, ...m.genres, ...m.decades.map((d) => decadeLabel(+d))];
+  if (m.min > 0 || m.max < 100) parts.push(m.max === 100 ? `${m.min}+` : `${m.min}–${m.max}`);
+  return (parts.length ? parts.join(' · ') : 'All my songs').slice(0, 80);
+}
+
+async function makerGo() {
+  const m = state.maker;
+  if (m.mode === 'mine') {
+    const all = makerMatches(m);
+    if (!all.length) { updateMakerCount(); return; }
+    const size = makerSize(m);
+    const songs = m.order === 'shuffle' ? shuffle(all).slice(0, size) : all.slice(0, size);
+    makerPrefs.mine = { ...m };
+    const settings = { min: m.min, max: m.max, tags: m.tags, decades: m.decades, genres: m.genres, length: m.length, order: m.order };
+    state.maker = null;
+    state.playlist = { id: 'new', name: mineName(m), kind: 'new', discover: false, settings, songs };
+    renderModal();
+    return;
+  }
+  if (m.busy) return;
+  const start = discoverStart(m.start);
+  // Shows progress in place, without redrawing the window.
+  const say = (t) => {
+    m.busy = t || null;
+    const c = $('#mk-count'), b = $('[data-action="maker-go"]');
+    if (state.maker !== m || !c) return;
+    c.textContent = t || '';
+    b.disabled = !!t; b.textContent = t ? 'Finding songs…' : 'Find songs';
+  };
+  say('Starting…');
+  try {
+    const res = await buildRecs({
+      ratings: state.ratings, from: start.from, unranked: state.unranked, notForMe: loadNope(),
+      reach: m.reach, onProgress: say,
+    });
+    if (state.maker !== m) return; // closed while it worked
+    if (res.needMore) { say(''); toast(`Score a few ${start.label === 'Songs I love' ? 'songs 80 or higher' : `"${start.label}" songs 70 or higher`} first, so it knows what you love there.`); return; }
+    if (!res.songs.length) { say(''); toast("Couldn't find new songs right now. Try again later."); return; }
+    makerPrefs.discover = { ...m, busy: null };
+    state.maker = null;
+    state.playlist = { id: 'new', name: `Discover: ${start.label}${m.reach === 'far' ? ' (further out)' : ''}`.slice(0, 80), kind: 'new', discover: true,
+      settings: { start: m.start, reach: m.reach }, songs: res.songs };
+    renderModal();
+  } catch (e) {
+    say('');
+    toast(e.message);
+  } finally {
+    if (state.maker === m && m.busy) say('');
+  }
 }
 
 function copyText(text, done) {
@@ -592,6 +794,7 @@ function renderModal() {
   if (state.guide) root.innerHTML = guideModal();
   else if (state.manual) root.innerHTML = manualModal();
   else if (state.rating) root.innerHTML = rateModal();
+  else if (state.maker) { root.innerHTML = makerModal(); updateMakerCount(); }
   else if (state.playlist) root.innerHTML = playlistModal();
   else if (state.importing) {
     if (!$('#import-text')) root.innerHTML = importModal();
@@ -927,7 +1130,7 @@ async function act(fn) {
 
 function closeModals() {
   state.search = null; state.rating = null; state.manual = null; state.guide = false;
-  state.importing = null; state.queueItem = null; state.playlist = null;
+  state.importing = null; state.queueItem = null; state.playlist = null; state.maker = null; state.returnTo = null;
   audio.pause();
   renderModal();
 }
@@ -951,7 +1154,7 @@ document.addEventListener('click', (e) => {
     }
     case 'sign-out': act(async () => {
       await store.signOut();
-      Object.assign(state, { uid: null, me: null, ratings: [], history: [], unranked: [], forYou: null, playlist: null, comparing: null, view: 'library', leftView: 'library', rightView: 'taste' });
+      Object.assign(state, { uid: null, me: null, ratings: [], history: [], unranked: [], forYou: null, playlist: null, saved: [], maker: null, returnTo: null, comparing: null, view: 'library', leftView: 'library', rightView: 'taste' });
       render();
     }); break;
     case 'view': {
@@ -989,8 +1192,19 @@ document.addEventListener('click', (e) => {
       // Once a song is ranked it leaves the Unranked list (the one being ranked, plus any same-song match).
       const k = songKey(song);
       const done = state.unranked.filter((u) => u.id === state.queueItem?.id || songKey(u) === k).map((u) => u.id);
-      const backToForYou = state.queueItem?.from === 'For you';
-      state.queueItem = null;
+      const back = state.returnTo;
+      const qid = state.queueItem?.id;
+      state.queueItem = null; state.returnTo = null;
+      // The new song it came from leaves For you or a Discover list (its name may differ a little from the
+      // catalog's); in a saved playlist it stays, now pointing at the ranked song.
+      if (back && qid) {
+        if (state.forYou?.songs) { state.forYou.songs = state.forYou.songs.filter((x) => x.song_id !== qid); saveForYou(); }
+        if (back.kind === 'saved') {
+          back.songs = back.songs.map((x) => (x.song_id === qid ? { ...x, song_id: song.song_id, title: song.title, artist: song.artist, artwork_url: song.artwork_url || x.artwork_url } : x));
+          store.savePlaylist({ id: back.savedId, name: back.name, kind: back.discover ? 'discover' : 'mine', songs: back.songs, settings: back.settings })
+            .then(async () => { state.saved = await store.playlists(); }).catch(() => {});
+        } else if (back.kind !== 'foryou') back.songs = back.songs.filter((x) => x.song_id !== qid);
+      }
       if (done.length) {
         await store.removeUnranked(done);
         state.unranked = state.unranked.filter((u) => !done.includes(u.id));
@@ -1000,7 +1214,7 @@ document.addEventListener('click', (e) => {
       state.rating = null; audio.pause();
       toast(`Ranked ${song.title}: ${score} · ${tierOf(score).name}`);
       render();
-      if (backToForYou) openPlaylist('foryou');
+      if (back) { state.playlist = back; renderModal(); }
     }); break;
     case 'delete-rating': act(async () => {
       const { song } = state.rating;
@@ -1078,22 +1292,74 @@ document.addEventListener('click', (e) => {
     }
     case 'fy-build': makeForYou(); break;
     case 'fy-rank': {
-      const song = (state.forYou?.songs || []).find((x) => x.song_id === id);
+      const song = plSong(id);
       if (!song) break;
+      const pl = state.playlist;
       state.playlist = null; audio.pause();
-      state.queueItem = { id: song.song_id, title: song.title, artist: song.artist, from: 'For you' };
+      state.returnTo = pl;
+      state.queueItem = { id: song.song_id, title: song.title, artist: song.artist, from: pl?.kind === 'foryou' || !pl ? 'For you' : pl.name };
       openSearch(searchTermFor(song));
       break;
     }
     case 'fy-save': act(async () => {
-      const song = (state.forYou?.songs || []).find((x) => x.song_id === id);
+      const song = plSong(id);
       if (!song) return;
-      await store.addUnranked([{ title: song.title, artist: song.artist, album: song.album, source: 'for-you' }]);
+      if (state.unranked.some((u) => songKey(u) === songKey(song))) { toast(`${song.title} is already on your Unranked list`); return; }
+      await store.addUnranked([{ title: song.title, artist: song.artist, album: song.album, source: state.playlist?.discover ? 'discover' : 'for-you' }]);
       state.unranked = await store.unranked();
       dropForYou(id, false);
       toast(`Saved ${song.title} to Unranked`);
     }); break;
     case 'fy-nope': dropForYou(id, true); break;
+    case 'maker-open': openMaker(el.dataset.mode); break;
+    case 'mk-chip': {
+      const { group, val } = el.dataset;
+      const m = state.maker;
+      if (el.dataset.single) {
+        m[group] = val;
+        el.closest('.modal').querySelectorAll(`[data-group="${group}"]`).forEach((b) => b.classList.toggle('on', b === el));
+      } else {
+        m[group] = m[group].includes(val) ? m[group].filter((x) => x !== val) : [...m[group], val];
+        el.classList.toggle('on');
+      }
+      updateMakerCount();
+      break;
+    }
+    case 'mk-set': {
+      state.maker[el.dataset.key] = el.dataset.val;
+      el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
+      if (el.dataset.key === 'reach') $('#mk-reach').textContent = REACH_HINT[el.dataset.val];
+      updateMakerCount();
+      break;
+    }
+    case 'maker-go': act(makerGo); break;
+    case 'pl-again': {
+      const pl = state.playlist;
+      state.playlist = null; audio.pause();
+      openMaker(pl.discover ? 'discover' : 'mine');
+      break;
+    }
+    case 'pl-save': act(async () => {
+      const pl = state.playlist;
+      if (!state.savedOk) throw new Error("Saving playlists needs a quick update to the app's database first.");
+      const name = ($('#pl-name')?.value || pl.name).trim() || 'My playlist';
+      if (!pl.songs.length) throw new Error('This playlist has no songs left.');
+      el.disabled = true;
+      const row = await store.savePlaylist({ name, kind: pl.discover ? 'discover' : 'mine', songs: pl.songs, settings: pl.settings });
+      state.saved = await store.playlists();
+      state.playlist = { id: `s:${row.id}`, savedId: row.id, name: row.name, kind: 'saved', discover: pl.discover, settings: row.settings, songs: row.songs };
+      render();
+      toast(`Saved "${row.name}"`);
+    }); break;
+    case 'pl-delete': act(async () => {
+      const pl = state.playlist;
+      if (!confirm(`Delete the playlist "${pl.name}"? The songs stay ranked.`)) return;
+      await store.deletePlaylist(pl.savedId);
+      state.saved = await store.playlists();
+      state.playlist = null; audio.pause();
+      render();
+      toast('Playlist deleted');
+    }); break;
     case 'accept': act(async () => { await store.acceptFriend(id); await refreshFriends(); toast('Friend added'); }); break;
     case 'unfriend': act(async () => { await store.removeFriend(id); await refreshFriends(); }); break;
     case 'compare': act(async () => {
@@ -1113,6 +1379,11 @@ async function refreshFriends() {
 let importTimer;
 // Choosing a file in the Import window.
 document.addEventListener('change', (e) => {
+  if ((e.target.id === 'mk-min' || e.target.id === 'mk-max') && state.maker) {
+    state.maker[e.target.id === 'mk-min' ? 'min' : 'max'] = +e.target.value;
+    updateMakerCount();
+    return;
+  }
   if (e.target.id !== 'import-file' || !e.target.files[0]) return;
   const file = e.target.files[0];
   act(async () => {
@@ -1127,6 +1398,7 @@ document.addEventListener('change', (e) => {
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (t.id === 'search-input') onSearchInput(t.value);
+  else if (t.id === 'pl-name' && state.playlist) state.playlist.name = t.value;
   else if (t.id === 'import-text') {
     state.importing.text = t.value;
     clearTimeout(importTimer);
@@ -1155,7 +1427,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.querySelector('.profile.open')) { closeProfileMenus(); return; }
     if (state.guide) { state.guide = false; renderModal(); return; }
-    if (state.search || state.rating || state.manual || state.importing || state.playlist) { closeModals(); return; }
+    if (state.search || state.rating || state.manual || state.importing || state.playlist || state.maker) { closeModals(); return; }
   }
   if (e.target.id !== 'search-input' || !state.search) return;
   const s = state.search;
