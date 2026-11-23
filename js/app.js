@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=22';
-import { searchSongs } from './itunes.js?v=22';
+import { createStore, isDemo } from './store.js?v=23';
+import { searchSongs } from './itunes.js?v=23';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=22';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=22';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=22';
+} from './stats.js?v=23';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=23';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=23';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -198,7 +198,7 @@ function fitFold() {
 }
 addEventListener('resize', fitFold);
 duoTall.addEventListener('change', fitFold);
-duoWide.addEventListener('change', fitFold);
+duoWide.addEventListener('change', () => { if (state.uid) render(); else fitFold(); });
 
 function mainView() {
   const wide = wideScreen.matches;
@@ -214,16 +214,17 @@ function mainView() {
     </div>
     <p class="center small guide-link"><button class="link" data-action="open-guide">How should I score songs?</button></p>`;
   if (wide) {
-    // One top row: logo, Rank button and profile (the usual header is hidden).
-    return `
+    // Held wide on the Duo, the quick-button rail down the right edge replaces the top row (v23).
+    // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
+    return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=22" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=23" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
       </div>
       <div class="who-wide">${whoHtml()}</div>
-    </div>
+    </div>`}
     <div class="cols">
       <div class="col" data-key="left:${left}"><nav class="seg tabs">${tab('library', 'My songs', left)}${tab('unranked', 'Unranked' + count, left)}</nav>${panel(left)}</div>
       <div class="col side" data-key="${shown}:${esc(state.comparing?.friend.id || '')}"><nav class="seg tabs">${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>${panel(shown)}</div>
@@ -232,6 +233,32 @@ function mainView() {
   return `${top}
     <nav class="seg tabs four">${tab('library', 'My songs')}${tab('unranked', 'Unranked')}${tab('taste', 'My taste')}${tab('friends', 'Friends' + badge)}</nav>
     ${panel(state.view)}`;
+}
+
+// v23: quick buttons in the strip under the clock and icons when the Duo is held wide.
+const ICON = {
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  next: '<path d="M6 5l9 7-9 7z"/><path d="M18 5v14"/>',
+  spark: '<path d="M11 3l1.9 5.1L18 10l-5.1 1.9L11 17l-1.9-5.1L4 10l5.1-1.9z"/><path d="M18.5 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
+  list: '<path d="M4 6h11M4 11h11M4 16h6"/><path d="M19 8v9"/><circle cx="17" cy="17" r="2"/>',
+  find: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.3v.2"/>',
+};
+const icon = (k) => `<span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg></span>`;
+function railHtml() {
+  const n = state.unranked.length;
+  const btn = (attrs, k, label, extra = '', cls = '') =>
+    `<button class="rail-btn ${cls}" ${attrs} aria-label="${label}" title="${label}">${icon(k)}<span class="rl">${label}</span>${extra}</button>`;
+  return `
+  <nav class="rail" aria-label="Quick buttons">
+    ${btn('data-action="open-search"', 'plus', 'Rank', '', 'main')}
+    ${n ? btn('data-action="un-next"', 'next', 'Next', `<b class="rail-count">${n > 99 ? '99+' : n}</b>`) : btn('data-action="import-open"', 'next', 'Import')}
+    ${btn(state.forYou?.songs?.length ? 'data-action="open-playlist" data-id="foryou"' : 'data-action="fy-build"', 'spark', 'For you')}
+    ${btn('data-action="maker-open" data-mode="mine"', 'list', 'Playlist')}
+    ${btn('data-action="rail-find"', 'find', 'Find')}
+    ${btn('data-action="open-guide"', 'help', 'Scoring')}
+    <div class="rail-me">${whoHtml()}</div>
+  </nav>`;
 }
 
 function songRow(r, { right = '', clickable = true, showDate = false } = {}) {
@@ -1311,6 +1338,12 @@ document.addEventListener('click', (e) => {
     case 'preview': togglePreview(el.dataset.url, el); break;
     case 'filter-tag': state.filters = { ...state.filters, tag: el.dataset.tag }; state.view = 'library'; state.leftView = 'library'; render(); break;
     case 'import-open': openImport(); break;
+    case 'rail-find': {
+      if (state.leftView !== 'library') { state.leftView = 'library'; render(); }
+      const box = document.querySelector('.col [data-filter="q"]');
+      if (box) { box.scrollIntoView({ block: 'nearest' }); box.focus({ preventScroll: true }); }
+      break;
+    }
     case 'import-order': state.importing.artistFirst = el.dataset.first === 'artist';
       el.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === el));
       updateImport(); break;

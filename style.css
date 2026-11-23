@@ -380,3 +380,24 @@ html.duo-wide .tier-row .tile, html.duo-tall .tier-row .tile { width: 130px; }
 html.duo-wide .profile-btn .avatar, html.duo-tall .profile-btn .avatar { width: 42px; height: 42px; }
 /* Held tall, the top half is short: the four filter menus share one row to leave more room for songs. */
 html.duo-tall .cols .filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* v23: held wide on the Duo, a column of quick buttons fills the strip under the clock and icons, and replaces
+   the top row so both columns start at the top. Only there: the folded screen and other layouts don't change. */
+.rail { display: none; }
+html.duo-wide .rail { display: flex; flex-direction: column; align-items: center; gap: 4px; position: fixed; z-index: 5;
+  right: 0; top: 108px; bottom: calc(10px + env(safe-area-inset-bottom)); width: max(76px, env(safe-area-inset-right)); }
+html.duo-wide body:has(.rail) { padding-right: max(76px, env(safe-area-inset-right)); }
+html.duo-wide body:has(.rail) main { padding-top: 10px; }
+.rail-btn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 68px;
+  padding: 6px 0 5px; background: none; border-radius: 14px; color: var(--text); }
+.rail-btn:hover, .rail-btn:active { background: var(--chip); }
+.rail-btn .ic { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--chip); }
+.rail-btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rail-btn.main .ic { background: var(--accent); color: var(--accent-text); width: 48px; height: 48px; }
+.rail-btn.main svg { width: 26px; height: 26px; stroke-width: 2.4; }
+.rail-btn .rl { font-size: .68rem; font-weight: 600; color: var(--muted); }
+.rail-btn.main .rl { color: var(--accent); }
+.rail-count { position: absolute; top: 2px; right: 6px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px;
+  background: var(--accent); color: var(--accent-text); font-size: .66rem; display: grid; place-items: center; }
+.rail-me { margin-top: auto; }
+.rail .profile-menu { top: auto; bottom: 0; right: calc(100% + 8px); }

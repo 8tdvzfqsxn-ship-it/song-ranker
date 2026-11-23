@@ -9,6 +9,13 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Done
 
+**Built 2026-11-22 (v22–v23):**
+- #15 Fill the Duo's inside screen: columns reach the screen edges with the gap still on the fold; text, covers,
+  badges and the Rank button a little bigger. Held wide, a **quick-button rail** fills the strip under the clock
+  and icons: Rank, Next (with the Unranked count; Import when empty), For you, Playlist, Find (jumps to the filter
+  box) and Scoring, with the profile circle at the bottom. It replaces the top row, so both columns start at the
+  top. The folded screen and the tall layout keep their layouts. Later ideas: tier jump, preview player in the rail.
+
 **Built 2026-11-22 (v19):**
 - #14 iPhone Duo half-open: Safari doesn't report the fold (checked with check.html), so the app finds it from the
   inside screen's size. **Held tall:** the two columns stack, one above the fold and one below, each scrolling on
