@@ -437,3 +437,6 @@ html.duo-wide .rail .profile-btn .avatar { width: 38px; height: 38px; }
 .fb-status { margin: 8px 0 6px; }
 .fb-status button { font-size: .8rem; padding: 6px 4px; }
 .fb-note input { flex: 1; min-width: 0; }
+/* v28: v26 let the rail scroll, which clipped the profile menu (it opens to the left, outside the rail) down to a
+   thin clear bar. The rail no longer scrolls, so the menu shows in full. */
+html.duo-wide .rail { overflow: visible; }
