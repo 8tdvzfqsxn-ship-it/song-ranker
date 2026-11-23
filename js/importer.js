@@ -1,7 +1,7 @@
 // Turns a pasted list or an uploaded file into songs for the Unranked list.
 // Pure functions: no browser needed, and nothing is looked up in a catalog here,
 // so even a library of thousands of songs imports instantly.
-import { songKey } from './stats.js?v=32';
+import { songKey } from './stats.js?v=33';
 
 // Reads an uploaded file as text. Apple's Music app saves its exports as UTF-16,
 // which a plain text read would garble, so check the first bytes.
@@ -155,4 +155,16 @@ export function songFromVideo(videoTitle, channel) {
     if (parts.length >= 2) return { title: parts.slice(1).join(' - ').trim(), artist: parts[0].trim() };
   }
   return { title: t || (videoTitle || '').trim(), artist };
+}
+
+// v33: the playlist code in a shared YouTube or YouTube Music link ("…playlist?list=PL…&si=…"), or null.
+// Only when the pasted text is just the link, so a song list that mentions a link isn't mistaken for one.
+export function playlistIdFrom(text) {
+  const t = text.trim();
+  if (!t || /\s/.test(t)) return null;
+  let u;
+  try { u = new URL(t.startsWith('http') ? t : `https://${t}`); } catch { return null; }
+  if (!/(^|\.)(youtube\.com|youtu\.be)$/.test(u.hostname)) return null;
+  const list = u.searchParams.get('list');
+  return list && /^[\w-]{2,64}$/.test(list) ? list : null;
 }

@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=32';
-import { searchSongs } from './itunes.js?v=32';
+import { createStore, isDemo } from './store.js?v=33';
+import { searchSongs } from './itunes.js?v=33';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=32';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource, takeoutVideoIds, songFromVideo } from './importer.js?v=32';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=32';
+} from './stats.js?v=33';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource, takeoutVideoIds, songFromVideo, playlistIdFrom } from './importer.js?v=33';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=33';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -230,7 +230,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=32" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=33" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -1140,13 +1140,16 @@ function importModal() {
             <b>Deselect all</b>, tick only <b>YouTube and YouTube Music</b>, and export. Open the download and choose
             the file named <b>music library songs.csv</b> below. It holds only songs you saved to your library;
             for liked songs and playlists, use a free transfer site (next).</dd>
+          <dt>YouTube Music playlist</dt>
+          <dd>In the playlist, tap <b>⋯ → Share → Copy link</b> and paste it above. The playlist has to be public or
+            unlisted; for a private one (like Liked Music) use Google Takeout, or copy the songs into an unlisted playlist.</dd>
           <dt>Any other app, or iPhone</dt>
           <dd>A free transfer site like <a href="https://www.tunemymusic.com" target="_blank" rel="noopener">TuneMyMusic</a>
             can save any app's playlists as a file: pick your app, then <b>Export to file</b> (CSV).
             Or paste any list with one "Song – Artist" per line.</dd>
         </dl>
       </details>
-      <label for="import-text">Paste a list, one song per line</label>
+      <label for="import-text">Paste a list, one song per line, or a YouTube Music playlist link</label>
       <textarea id="import-text" rows="6" spellcheck="false" placeholder="Take On Me – a-ha&#10;Dreams – Fleetwood Mac">${esc(im.text)}</textarea>
       <div class="row between import-order">
         <span class="muted small">Each line is</span>
@@ -1172,13 +1175,14 @@ function renderImportSummary() {
     : `<label class="file-btn">Choose a file (CSV or text)<input id="import-file" type="file" accept=".csv,.txt,.tsv,.tab,text/plain,text/csv,text/tab-separated-values"></label>`;
   const sum = $('#import-summary');
   if (im.file?.looking) {
-    const { done, total } = im.file.looking;
+    const { done, total, link } = im.file.looking;
+    if (link) { sum.innerHTML = '<p class="small"><b>Reading the playlist from YouTube…</b></p>'; return; }
     sum.innerHTML = `<p class="small"><b>Looking up song names on YouTube…</b> ${done} of ${total}</p>
       <p class="tiny muted">This file lists only video codes, so each one is looked up. A big playlist takes a minute.</p>`;
     return;
   }
   const p = im.parsed;
-  if (!p) { sum.innerHTML = ''; return; }
+  if (!p || (im.linkError && !im.file)) { sum.innerHTML = im.linkError ? `<p class="small err">${esc(im.linkError)}</p>` : ''; return; }
   const n = p.fresh.length;
   const left = [p.ranked && `${p.ranked} already ranked`, p.repeats && `${p.repeats} already waiting or listed twice`].filter(Boolean).join(', ');
   sum.innerHTML = `
@@ -1214,8 +1218,35 @@ async function lookupVideos(ids, onProgress) {
   return found.filter((x) => x && x.title);
 }
 
+// v33: a pasted YouTube or YouTube Music playlist link is read through the helper on Supabase.
+async function loadPlaylistLink(list) {
+  const im = state.importing;
+  im.file = { name: 'YouTube playlist', text: '', looking: { done: 0, total: 0, link: true } };
+  im.parsed = null;
+  renderImportSummary();
+  try {
+    const items = await store.youtubePlaylist(list);
+    if (state.importing !== im || !im.file?.looking?.link) return; // closed or replaced meanwhile
+    const songs = items.map((x) => songFromVideo(x.title, x.channel)).filter((x) => x.title);
+    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    im.file = { name: `YouTube playlist (${songs.length} songs)`, source: 'youtube-music',
+      text: ['Track name,Artist name', ...songs.map((x) => `${cell(x.title)},${cell(x.artist)}`)].join('\n') };
+  } catch (e) {
+    if (state.importing !== im) return;
+    im.file = null;
+    im.linkError = e.message || "Couldn't read that playlist.";
+  }
+  updateImport();
+}
+
 function updateImport() {
   const im = state.importing;
+  if (!im.file) {
+    const list = playlistIdFrom(im.text);
+    if (list && list !== im.linkTried) { im.linkTried = list; im.linkError = null; loadPlaylistLink(list); return; }
+    if (list) { im.parsed = null; renderImportSummary(); return; } // already tried: don't treat the link as a song
+    im.linkTried = null; im.linkError = null;
+  }
   const text = im.file ? im.file.text : im.text;
   im.parsed = text.trim() ? sortImport(parseSongs(text, { artistFirst: im.artistFirst }), state.ratings, state.unranked) : null;
   renderImportSummary();

@@ -1,7 +1,7 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
 // Practice mode leaves out the extras that need a server, like the other catalogs.
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=32';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=33';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
@@ -129,6 +129,7 @@ function demoStore() {
       save();
     },
     async isKeeper() { return true; },
+    async youtubePlaylist() { throw new Error('Playlist links work in the live app, not in practice mode.'); },
     async feedbackList() { return [...(db.feedback || [])].sort((a, b) => b.created_at.localeCompare(a.created_at)); },
     async updateFeedback(id, f) { const x = (db.feedback || []).find((r) => r.id === id); if (x) { Object.assign(x, pickFeedbackEdit(f)); save(); } },
     // Skip = to the back of the line.
@@ -314,5 +315,7 @@ async function supabaseStore() {
     },
     // Year and genre for a Deezer song, which its search results leave out.
     async songDetails(album) { return call('song-search', { source: 'details', album }); },
+    // The songs in a public or unlisted YouTube playlist (v33): [{ title, channel }].
+    async youtubePlaylist(list) { return (await call('song-search', { source: 'ytplaylist', list })).items || []; },
   };
 }

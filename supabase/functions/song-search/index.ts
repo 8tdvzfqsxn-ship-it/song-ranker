@@ -4,6 +4,8 @@
 //   { term }                      → Apple's catalog (backup for devices that block Apple)
 //   { term, source: 'more' }      → other catalogs (Deezer, then MusicBrainz) for songs Apple lacks
 //   { source: 'details', album }  → year + genre for a Deezer song, looked up when it's picked
+//   { source: 'ytplaylist', list } → the videos in a public or unlisted YouTube playlist (v33). Needs the
+//                                    secret YOUTUBE_API_KEY (Edge Functions → Secrets), a free YouTube Data API key.
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +31,10 @@ Deno.serve(async (req) => {
   const term = String(body.term ?? '').slice(0, 100).trim();
 
   if (body.source === 'details') return json(await deezerDetails(String(body.album ?? '')));
+  if (body.source === 'ytplaylist') {
+    const r = await youtubePlaylist(String(body.list ?? ''));
+    return json(r, r.error ? 400 : 200);
+  }
   if (body.source === 'more') {
     if (!term) return json({ results: [] });
     for (const search of [deezer, musicbrainz]) {
@@ -111,4 +117,37 @@ async function deezerDetails(album: string) {
   } catch {
     return {};
   }
+}
+
+// The titles and channels of a public or unlisted YouTube playlist, 50 at a time (up to 2,000 songs).
+// YouTube's official Data API; each page of 50 costs 1 unit of the free 10,000-a-day allowance.
+// deno-lint-ignore no-explicit-any
+async function youtubePlaylist(list: string): Promise<any> {
+  if (!/^[\w-]{2,64}$/.test(list)) return { error: "That doesn't look like a playlist link." };
+  if (list === 'LM' || list === 'LL') return { error: 'Liked Music is private, so it can\'t be read from a link. Use Google Takeout, or copy those songs into a public or unlisted playlist.' };
+  const key = Deno.env.get('YOUTUBE_API_KEY');
+  if (!key) return { error: "Playlist links aren't turned on yet." };
+  const items: { title: string; channel: string }[] = [];
+  let page = '';
+  for (let i = 0; i < 40; i++) {
+    const p = new URLSearchParams({ part: 'snippet', playlistId: list, maxResults: '50', key,
+      fields: 'nextPageToken,items(snippet(title,videoOwnerChannelTitle))' });
+    if (page) p.set('pageToken', page);
+    const res = await fetch('https://www.googleapis.com/youtube/v3/playlistItems?' + p, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      if (res.status === 404 || res.status === 403) {
+        return { error: "Couldn't open that playlist. It has to be public or unlisted, not private." };
+      }
+      return { error: `YouTube didn't answer (error ${res.status}). Try again in a bit.` };
+    }
+    const j = await res.json();
+    for (const it of j.items ?? []) {
+      const s = it.snippet;
+      if (!s || s.title === 'Private video' || s.title === 'Deleted video') continue;
+      items.push({ title: String(s.title).slice(0, 300), channel: String(s.videoOwnerChannelTitle ?? '').slice(0, 200) });
+    }
+    page = j.nextPageToken;
+    if (!page) break;
+  }
+  return { items };
 }
