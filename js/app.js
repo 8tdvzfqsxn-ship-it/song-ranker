@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=29';
-import { searchSongs } from './itunes.js?v=29';
+import { createStore, isDemo } from './store.js?v=30';
+import { searchSongs } from './itunes.js?v=30';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=29';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=29';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=29';
+} from './stats.js?v=30';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=30';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=30';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -230,7 +230,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=29" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=30" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -604,13 +604,15 @@ function playlistModal() {
   </div>`;
 }
 
-const playlistText = (pl) => pl.songs.map((x) => `${x.title} – ${x.artist}`).join('\n');
+// v30: "Artist - Song" with a plain hyphen, one per line: the form transfer sites like TuneMyMusic read when pasted.
+const playlistText = (pl) => pl.songs.map((x) => `${x.artist} - ${x.title}`).join('\n');
 // A spreadsheet file (CSV) that transfer sites read: one song per row.
 function downloadPlaylist(pl) {
   const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = ['Track name,Artist name,Album', ...pl.songs.map((x) => [x.title, x.artist, x.album].map(cell).join(','))].join('\r\n');
   const name = `${pl.name.replace(/[^\w\s-]+/g, '').trim() || 'playlist'}.csv`;
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv' });
+  // No invisible "byte order mark" at the start (v30): TuneMyMusic fails to read files that have one.
+  const blob = new Blob([csv], { type: 'text/csv' });
   // v29: on iPhone (above all as a Home Screen app) a download link opens a viewer that can't reach the file and
   // freezes ("WebKitBlobResource error 1"). Where the phone can share files, hand it to the share sheet instead:
   // it has Save to Files, AirDrop and Mail.
