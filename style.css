@@ -361,3 +361,22 @@ html.duo-wide .modal { max-width: none; }
    pushed the columns left of the fold. Equal room on both sides puts the gap between the columns on the fold. */
 html.duo-wide body { padding-left: max(env(safe-area-inset-left), env(safe-area-inset-right));
   padding-right: max(env(safe-area-inset-left), env(safe-area-inset-right)); }
+
+/* v22: fill the Duo's inside screen better. The band above the page (clock and icons) belongs to the phone, so the
+   room comes from the sides and from slightly bigger text, covers and score badges. */
+html.duo-wide, html.duo-tall, html.duo-wide body, html.duo-tall body { font-size: 17px; }
+/* Held wide: no matching empty band on the left any more (replaces v21). The left column runs from the left edge to
+   just before the fold, the right one from just after the fold to the clock strip. */
+html.duo-wide body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+html.duo-wide main, html.duo-tall main { max-width: none; padding-left: 16px; padding-right: 16px; }
+html.duo-wide .cols { grid-template-columns: calc(50vw - env(safe-area-inset-left) - 28px) minmax(0, 1fr); }
+html.duo-wide .wide-top, html.duo-tall .wide-top { padding: 2px 0 8px; }
+html.duo-wide .wide-rank .big, html.duo-tall .wide-rank .big { padding: 12px 14px; font-size: 1.05rem; }
+html.duo-wide .song > .art, html.duo-tall .song > .art { width: 58px; height: 58px; }
+html.duo-wide .song > .score, html.duo-tall .song > .score { min-width: 48px; height: 38px; font-size: 1.05rem; }
+html.duo-wide .song.compact > .score, html.duo-tall .song.compact > .score { min-width: 38px; height: 28px; font-size: .9rem; }
+html.duo-wide .grid, html.duo-tall .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+html.duo-wide .tier-row .tile, html.duo-tall .tier-row .tile { width: 130px; }
+html.duo-wide .profile-btn .avatar, html.duo-tall .profile-btn .avatar { width: 42px; height: 42px; }
+/* Held tall, the top half is short: the four filter menus share one row to leave more room for songs. */
+html.duo-tall .cols .filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
