@@ -410,3 +410,14 @@ html.duo-wide .rail-btn.main .ic { width: 46px; height: 46px; }
 html.duo-wide .rail-me { margin-top: 6px; }
 /* v25: app.js sets --rail-top from where the page starts on the screen. */
 html.duo-wide .rail { top: var(--rail-top, 198px); }
+/* v26: the music ring around the clock reaches about 210 points down, and the column was a little too tall, so it
+   spilled upward under it. Now it starts at 222, fills downward, and every button is a bit smaller to fit. */
+html.duo-wide .rail { top: var(--rail-top, 222px); justify-content: flex-start; overflow-y: auto; scrollbar-width: none; }
+html.duo-wide .rail-btn { padding: 2px 0; }
+html.duo-wide .rail-btn .ic { width: 36px; height: 36px; }
+html.duo-wide .rail-btn svg { width: 20px; height: 20px; }
+html.duo-wide .rail-btn.main .ic { width: 42px; height: 42px; }
+html.duo-wide .rail-btn .rl { line-height: 1.15; }
+html.duo-wide .rail-count { top: 0; right: 8px; }
+html.duo-wide .rail-me { margin-top: auto; padding-top: 4px; }
+html.duo-wide .rail .profile-btn .avatar { width: 38px; height: 38px; }

@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=25';
-import { searchSongs } from './itunes.js?v=25';
+import { createStore, isDemo } from './store.js?v=26';
+import { searchSongs } from './itunes.js?v=26';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=25';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=25';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=25';
+} from './stats.js?v=26';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=26';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=26';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -189,7 +189,7 @@ function fitFold() {
   if (range) range.style.marginTop = '';
   // Held wide, the clock and music area reaches about 190 points down the screen. Sometimes the page starts below
   // a band at the top (it's then shorter than the 669-point screen), so the rail's top moves up by that band.
-  if (duoWide.matches) root.style.setProperty('--rail-top', `${Math.max(16, 198 - Math.max(0, DUO_SHORT - innerHeight))}px`);
+  if (duoWide.matches) root.style.setProperty('--rail-top', `${Math.max(16, 222 - Math.max(0, DUO_SHORT - innerHeight))}px`);
   if (!duoTall.matches) { if (cols) cols.style.gridTemplateRows = ''; return; }
   const y = foldY();
   root.style.setProperty('--fold-y', `${y}px`);
@@ -223,7 +223,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=25" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=26" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
