@@ -1,7 +1,7 @@
 // Turns a pasted list or an uploaded file into songs for the Unranked list.
 // Pure functions: no browser needed, and nothing is looked up in a catalog here,
 // so even a library of thousands of songs imports instantly.
-import { songKey } from './stats.js?v=30';
+import { songKey } from './stats.js?v=31';
 
 // Reads an uploaded file as text. Apple's Music app saves its exports as UTF-16,
 // which a plain text read would garble, so check the first bytes.
