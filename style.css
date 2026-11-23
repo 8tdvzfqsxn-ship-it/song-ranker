@@ -401,3 +401,10 @@ html.duo-wide body:has(.rail) main { padding-top: 10px; }
   background: var(--accent); color: var(--accent-text); font-size: .66rem; display: grid; place-items: center; }
 .rail-me { margin-top: auto; }
 .rail .profile-menu { top: auto; bottom: 0; right: calc(100% + 8px); }
+/* v24: with music playing, the Duo stacks the song's live activity above the clock, so that area reaches about 190
+   points down. The rail now stacks from the bottom up and starts below it; buttons are a little more compact. */
+html.duo-wide .rail { top: 198px; justify-content: flex-end; gap: 2px; }
+html.duo-wide .rail-btn { padding: 4px 0 3px; gap: 2px; }
+html.duo-wide .rail-btn .ic { width: 40px; height: 40px; }
+html.duo-wide .rail-btn.main .ic { width: 46px; height: 46px; }
+html.duo-wide .rail-me { margin-top: 6px; }

@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=23';
-import { searchSongs } from './itunes.js?v=23';
+import { createStore, isDemo } from './store.js?v=24';
+import { searchSongs } from './itunes.js?v=24';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=23';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=23';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=23';
+} from './stats.js?v=24';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=24';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=24';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -165,7 +165,8 @@ document.addEventListener('click', (e) => { if (!e.target.closest('.profile')) c
 // 669 × 951) it runs across the middle. Held tall, the two columns stack above and below the fold.
 const DUO_TALL_Q = '(min-width: 640px) and (max-width: 699px) and (min-height: 700px)';
 const duoTall = matchMedia(DUO_TALL_Q);
-const duoWide = matchMedia('(min-width: 900px) and (max-width: 1000px) and (max-height: 700px)');
+// min-height keeps big regular iPhones held sideways (about 956 × 440) out of it.
+const duoWide = matchMedia('(min-width: 900px) and (max-width: 1000px) and (min-height: 450px) and (max-height: 700px)');
 const wideScreen = matchMedia(`(min-width: 700px), ${DUO_TALL_Q}`);
 wideScreen.addEventListener('change', () => { if (state.uid) render(); });
 const DUO_LONG = 951;
@@ -218,7 +219,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=23" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=24" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
