@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=28';
-import { searchSongs } from './itunes.js?v=28';
+import { createStore, isDemo } from './store.js?v=29';
+import { searchSongs } from './itunes.js?v=29';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=28';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=28';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=28';
+} from './stats.js?v=29';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=29';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=29';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -230,7 +230,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=28" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=29" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -592,11 +592,11 @@ function playlistModal() {
       ${songs.length ? `
       <h3>Put it in your music app</h3>
       <div class="row wrap pl-actions">
-        <button class="primary" data-action="pl-download">Download file</button>
+        <button class="primary" data-action="pl-download">${navigator.canShare ? 'Save file' : 'Download file'}</button>
         <button data-action="pl-copy">Copy list</button>
         <button data-action="pl-share">Share</button>
       </div>
-      <p class="tiny muted">For YouTube Music (or any app): download the file, open the free site
+      <p class="tiny muted">For YouTube Music (or any app): save the file${navigator.canShare ? ' (choose <b>Save to Files</b>)' : ''}, open the free site
         <a href="https://www.tunemymusic.com/transfer/file-to-youtube-music" target="_blank" rel="noopener">TuneMyMusic</a>,
         choose <b>File</b> as the source and upload it, then pick <b>YouTube Music</b> as the destination.</p>` : ''}
       ${pl.kind === 'saved' ? `<p class="tiny"><button class="link danger-link-plain" data-action="pl-delete">Delete this playlist</button></p>` : ''}
@@ -609,12 +609,21 @@ const playlistText = (pl) => pl.songs.map((x) => `${x.title} – ${x.artist}`).j
 function downloadPlaylist(pl) {
   const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const csv = ['Track name,Artist name,Album', ...pl.songs.map((x) => [x.title, x.artist, x.album].map(cell).join(','))].join('\r\n');
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv' })),
-    download: `${pl.name.replace(/[^\w\s-]+/g, '').trim() || 'playlist'}.csv`,
-  });
+  const name = `${pl.name.replace(/[^\w\s-]+/g, '').trim() || 'playlist'}.csv`;
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv' });
+  // v29: on iPhone (above all as a Home Screen app) a download link opens a viewer that can't reach the file and
+  // freezes ("WebKitBlobResource error 1"). Where the phone can share files, hand it to the share sheet instead:
+  // it has Save to Files, AirDrop and Mail.
+  const file = typeof File === 'function' ? new File([blob], name, { type: 'text/csv' }) : null;
+  if (file && navigator.canShare?.({ files: [file] })) {
+    navigator.share({ files: [file], title: pl.name })
+      .then(() => toast('Saved. Upload the file at TuneMyMusic to send it to YouTube Music.'))
+      .catch((e) => { if (e?.name !== 'AbortError') toast("Couldn't share the file. Try Copy list instead."); });
+    return;
+  }
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
   document.body.append(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
   toast('Downloaded. Upload it at TuneMyMusic to send it to YouTube Music.');
 }
 
