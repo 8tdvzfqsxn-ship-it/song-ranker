@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=31';
-import { searchSongs } from './itunes.js?v=31';
+import { createStore, isDemo } from './store.js?v=32';
+import { searchSongs } from './itunes.js?v=32';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=31';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=31';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=31';
+} from './stats.js?v=32';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource, takeoutVideoIds, songFromVideo } from './importer.js?v=32';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=32';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -230,7 +230,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=31" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=32" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -1171,21 +1171,47 @@ function renderImportSummary() {
     ? `<div class="file-chip"><span>📄 ${esc(im.file.name)}</span><button class="link" data-action="import-clear-file">Use pasted list instead</button></div>`
     : `<label class="file-btn">Choose a file (CSV or text)<input id="import-file" type="file" accept=".csv,.txt,.tsv,.tab,text/plain,text/csv,text/tab-separated-values"></label>`;
   const sum = $('#import-summary');
+  if (im.file?.looking) {
+    const { done, total } = im.file.looking;
+    sum.innerHTML = `<p class="small"><b>Looking up song names on YouTube…</b> ${done} of ${total}</p>
+      <p class="tiny muted">This file lists only video codes, so each one is looked up. A big playlist takes a minute.</p>`;
+    return;
+  }
   const p = im.parsed;
   if (!p) { sum.innerHTML = ''; return; }
   const n = p.fresh.length;
   const left = [p.ranked && `${p.ranked} already ranked`, p.repeats && `${p.repeats} already waiting or listed twice`].filter(Boolean).join(', ');
   sum.innerHTML = `
     <p class="small"><b>${n} new song${n === 1 ? '' : 's'}</b>${left ? ` <span class="muted">(skipping ${left})</span>` : ''}</p>
+    ${im.file?.missing ? `<p class="tiny muted">${im.file.missing} video${im.file.missing === 1 ? " couldn't" : "s couldn't"} be found on YouTube (deleted or private), so ${im.file.missing === 1 ? "it's" : "they're"} left out.</p>` : ''}
     ${!n && !p.ranked && !p.repeats && im.file ? `<p class="small err">No song titles found in this file. Some exports (like Google Takeout's playlists) only list
       codes, not titles. For YouTube Music, use <b>music library songs.csv</b>, or a free transfer site for likes and playlists.</p>` : ''}
     ${n ? `<ul class="import-peek small">${p.fresh.slice(0, 3).map((s) =>
       `<li><b>${esc(s.title)}</b> · ${s.artist ? esc(s.artist) : '<span class="muted">artist unknown</span>'}</li>`).join('')}${n > 3 ? `<li class="muted">and ${n - 3} more</li>` : ''}</ul>
-      ${!im.file || detectSource(im.file.text) === 'file' ? `<p class="tiny muted">Song and artist the wrong way round? Switch "Each line is" above.</p>` : ''}` : ''}
+      ${!im.file || (!im.file.source && detectSource(im.file.text) === 'file') ? `<p class="tiny muted">Song and artist the wrong way round? Switch "Each line is" above.</p>` : ''}` : ''}
     <div class="row between actions">
       <span></span>
       <button class="primary" data-action="import-add" ${n ? '' : 'disabled'}>Add ${n || ''} to Unranked</button>
     </div>`;
+}
+
+// Looks up YouTube videos' titles and channels with YouTube's free public oEmbed lookup (no account or key),
+// six at a time, keeping the playlist's order. Deleted or private videos are skipped.
+async function lookupVideos(ids, onProgress) {
+  const found = new Array(ids.length).fill(null);
+  let next = 0, done = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const i = next++;
+      try {
+        const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${ids[i]}`)}`);
+        if (r.ok) { const j = await r.json(); found[i] = songFromVideo(j.title, j.author_name); }
+      } catch { /* skip this one */ }
+      onProgress(++done);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(6, ids.length) }, worker));
+  return found.filter((x) => x && x.title);
 }
 
 function updateImport() {
@@ -1466,7 +1492,7 @@ document.addEventListener('click', (e) => {
       if (!songs.length) return;
       el.disabled = true; el.textContent = 'Adding…';
       try {
-        await store.addUnranked(songs.map((x) => ({ ...x, source: im.file ? detectSource(im.file.text) : 'paste' })));
+        await store.addUnranked(songs.map((x) => ({ ...x, source: im.file ? (im.file.source || detectSource(im.file.text)) : 'paste' })));
         state.unranked = await store.unranked();
       } catch (err) {
         // Some may have gone in already; re-check so trying again only adds the rest.
@@ -1619,6 +1645,23 @@ document.addEventListener('change', (e) => {
     if (file.size > 20e6) throw new Error('That file is too big (over 20 MB).');
     const text = await readFileText(file);
     if (!state.importing) return;
+    // v32: a Takeout playlist file has only video codes; look up each video's title and channel.
+    const ids = takeoutVideoIds(text);
+    if (ids?.length) {
+      const im = state.importing;
+      im.file = { name: file.name, text: '', looking: { done: 0, total: ids.length } };
+      im.parsed = null;
+      renderImportSummary();
+      const songs = await lookupVideos(ids, (done) => {
+        if (state.importing === im && im.file?.looking) { im.file.looking.done = done; renderImportSummary(); }
+      });
+      if (state.importing !== im || im.file?.name !== file.name) return; // closed or replaced meanwhile
+      const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      im.file = { name: file.name, source: 'youtube-music', missing: ids.length - songs.length,
+        text: ['Track name,Artist name', ...songs.map((x) => `${cell(x.title)},${cell(x.artist)}`)].join('\n') };
+      updateImport();
+      return;
+    }
     state.importing.file = { name: file.name, text };
     updateImport();
   });

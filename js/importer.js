@@ -1,7 +1,7 @@
 // Turns a pasted list or an uploaded file into songs for the Unranked list.
 // Pure functions: no browser needed, and nothing is looked up in a catalog here,
 // so even a library of thousands of songs imports instantly.
-import { songKey } from './stats.js?v=31';
+import { songKey } from './stats.js?v=32';
 
 // Reads an uploaded file as text. Apple's Music app saves its exports as UTF-16,
 // which a plain text read would garble, so check the first bytes.
@@ -128,4 +128,31 @@ export function searchTermFor(s) {
   const title = s.title.replace(/\s*[([].*?[)\]]/g, '').replace(/\s+-\s+.*$/, '').trim() || s.title;
   const artist = (s.artist || '').split(/\s*(?:,|;|&|\bfeat\.?|\bft\.?|\bwith\b)\s*/i)[0].trim();
   return `${title} ${artist}`.trim();
+}
+
+// v32: Google Takeout's YouTube playlist files ("…-videos.csv") list only video codes, no titles.
+// Returns the codes (in order, without repeats) when the file is one of those, otherwise null.
+export function takeoutVideoIds(text) {
+  const first = text.split(/\r\n|\r|\n/, 1)[0];
+  const header = splitRows(first, ',')[0].map(norm);
+  const v = header.indexOf('video id');
+  if (v < 0 || findCol(header, TITLE_COLS) >= 0) return null;
+  const ids = splitRows(text, ',').slice(1).map((r) => (r[v] || '').trim()).filter((id) => /^[\w-]{11}$/.test(id));
+  return [...new Set(ids)];
+}
+
+// Turns a YouTube video's title and channel name into a song. Music uploads come as "Song" on an
+// "Artist - Topic" channel; music videos as "Artist - Song (Official Video)" on the artist's channel.
+export function songFromVideo(videoTitle, channel) {
+  const topic = /\s+-\s+Topic$/i.test(channel || '');
+  const artist = (channel || '').replace(/\s+-\s+Topic$/i, '').replace(/\s*VEVO$/i, '').trim();
+  let t = (videoTitle || '').trim()
+    .replace(/\s*[([][^)\]]*\b(official|video|audio|lyrics?|visuali[sz]er|hd|hq|4k|mv|m\/v)\b[^)\]]*[)\]]/gi, '')
+    .replace(/\s+\|.*$/, '')
+    .replace(/\s{2,}/g, ' ').trim();
+  if (!topic) {
+    const parts = t.split(/\s+[-–—]\s+/);
+    if (parts.length >= 2) return { title: parts.slice(1).join(' - ').trim(), artist: parts[0].trim() };
+  }
+  return { title: t || (videoTitle || '').trim(), artist };
 }

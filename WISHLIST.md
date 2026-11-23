@@ -9,6 +9,14 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Done
 
+**Built 2026-11-22 (v29–v32):**
+- Playlist files: **Save file** opens the iPhone share sheet (Save to Files) instead of a download that froze the
+  Home Screen app; no byte order mark (TuneMyMusic rejected it); **Copy list** gives "Artist - Song" lines; the
+  TuneMyMusic link opens its file-to-YouTube Music page. Tested end to end into YouTube Music by Josh.
+- #17 Google Takeout playlist files ("…-videos.csv", video codes only) now import: each code is looked up with
+  YouTube's free public oEmbed lookup (no key), titles are tidied ("Artist - Song (Official Video)" → song and
+  artist; "Artist - Topic" channels), deleted or private videos are counted and left out.
+
 **Built 2026-11-22 (v27):**
 - #16 Feedback: **Send feedback…** in the profile menu (Idea / Something's wrong / Other, plus a message; the app adds
   the sender's name, version and screen details). Stored in Supabase (`feedback`); senders can only add. The keeper
