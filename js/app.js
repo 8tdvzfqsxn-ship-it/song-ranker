@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=26';
-import { searchSongs } from './itunes.js?v=26';
+import { createStore, isDemo } from './store.js?v=27';
+import { searchSongs } from './itunes.js?v=27';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=26';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=26';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=26';
+} from './stats.js?v=27';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=27';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=27';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -40,6 +40,10 @@ const state = {
   forYou: null,      // { at, songs } the latest "For you" list
   forYouBusy: null,  // progress text while it's being built
   saved: [],         // playlists I made and saved (#12)
+  feedback: null,    // the Send feedback window: { kind, text, busy } (#16)
+  inbox: null,       // the keeper's Feedback inbox: { items, filter } (#16)
+  keeper: false,     // true for the app's keeper (Josh), who reads the feedback
+  inboxNew: 0,       // how many feedback items still have the status new
   savedOk: true,     // false when the live database doesn't have the playlists table yet
   maker: null,       // the "Make a playlist" / "Discover" window: { mode, ...choices, busy }
   returnTo: null,    // the playlist to go back to after ranking a song from it
@@ -107,6 +111,9 @@ async function loadAll() {
   try { state.unranked = await store.unranked(); } catch { state.unranked = []; }
   loadForYou();
   try { state.saved = await store.playlists(); state.savedOk = true; } catch { state.saved = []; state.savedOk = false; }
+  // Feedback inbox: only the keeper; a missing table (live database not updated yet) just means no inbox.
+  try { state.keeper = await store.isKeeper(); } catch { state.keeper = false; }
+  if (state.keeper) { try { state.inboxNew = (await store.feedbackList()).filter((f) => f.status === 'new').length; } catch { state.inboxNew = 0; } }
 }
 
 // ---------------------------------------------------------------- rendering
@@ -151,6 +158,8 @@ const whoHtml = () => `
       <div class="pm-name">${esc(state.me?.display_name)}</div>
       <button class="link small code-copy" data-action="copy-plain-code" title="Copy your friend code">Friend code <b>${esc(state.me?.friend_code)}</b> · copy</button>
       <button class="link small" data-action="share-invite" role="menuitem">Share invite…</button>
+      <button class="link small" data-action="feedback-open" role="menuitem">Send feedback…</button>
+      ${state.keeper ? `<button class="link small" data-action="inbox-open" role="menuitem">Feedback inbox${state.inboxNew ? ` <span class="dot">${state.inboxNew}</span>` : ''}</button>` : ''}
       <button class="link danger-link" data-action="sign-out" role="menuitem">Sign out</button>
     </div>
   </div>`;
@@ -174,14 +183,12 @@ const DUO_SHORT = 669;
 // Where the fold falls on the page when held tall. Safari's toolbars sit above the page, so the page's top is
 // that much below the screen's top; the Home Screen app fills the screen and the fold is simply the middle.
 const foldY = () => { const screenH = Math.max(innerHeight, DUO_LONG); return Math.round(screenH / 2 - (screenH - innerHeight)); };
-// Temporary (v20): the version label also shows the screen size and which layout is in use, so a screenshot
-// from the Duo tells us what the app sees. Remove once the half-open layouts are confirmed.
+// Sent along with feedback: the version, screen size and layout, and whether it runs from the Home Screen.
 const VERSION = (document.querySelector('.version')?.textContent || '').trim().split(' ')[0];
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const screenInfo = () => `${VERSION} · ${innerWidth}×${innerHeight} · ${duoTall.matches ? 'Duo tall' : duoWide.matches ? 'Duo wide' : wideScreen.matches ? 'wide' : 'phone'} · ${standalone ? 'app' : 'Safari'}`;
 function fitFold() {
   const root = document.documentElement;
-  const label = document.querySelector('.version');
-  if (label) label.textContent = `${VERSION} · ${innerWidth}×${innerHeight} · ${duoTall.matches ? 'Duo tall' : duoWide.matches ? 'Duo wide' : wideScreen.matches ? 'wide' : 'phone'} · ${standalone ? 'app' : 'Safari'}`;
   root.classList.toggle('duo-tall', duoTall.matches);
   root.classList.toggle('duo-wide', duoWide.matches);
   const cols = document.querySelector('.cols');
@@ -223,7 +230,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=26" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=27" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
@@ -903,9 +910,57 @@ function compareView() {
 
 // ---------------------------------------------------------------- modals
 
+// v27 (#16): feedback from anyone, and the keeper's inbox.
+const FB_KIND = { idea: ['💡', 'Idea'], problem: ['🐞', "Something's wrong"], other: ['💬', 'Other'] };
+const FB_STATUS = [['new', 'New'], ['planned', 'Planned'], ['done', 'Done'], ['wont', "Won't do"]];
+function feedbackModal() {
+  const f = state.feedback;
+  return `
+  <div class="overlay" data-action="close-modal-bg">
+    <div class="modal feedback" role="dialog" aria-label="Send feedback">
+      <div class="row between"><h2>Send feedback</h2><button class="link" data-action="close-modal">Cancel</button></div>
+      <p class="muted small">An idea to make Song Ranker better, or something that isn't working? It goes straight to the person who makes the app.</p>
+      <div class="seg fb-kinds">${Object.entries(FB_KIND).map(([k, [ic, label]]) =>
+        `<button class="${f.kind === k ? 'on' : ''}" data-action="fb-kind" data-kind="${k}">${ic} ${label}</button>`).join('')}</div>
+      <textarea id="fb-text" rows="6" maxlength="2000" placeholder="${f.kind === 'problem' ? 'What happened, and what did you expect?' : 'Tell us about it…'}">${esc(f.text)}</textarea>
+      <p class="tiny muted">Sent with your name and these details about your screen: ${esc(screenInfo())}</p>
+      <div class="row between"><span></span><button class="primary" data-action="fb-send" ${f.busy ? 'disabled' : ''}>${f.busy ? 'Sending…' : 'Send'}</button></div>
+    </div>
+  </div>`;
+}
+function inboxModal() {
+  const ib = state.inbox;
+  const counts = Object.fromEntries(FB_STATUS.map(([v]) => [v, ib.items.filter((x) => x.status === v).length]));
+  const shown = ib.filter === 'all' ? ib.items : ib.items.filter((x) => x.status === ib.filter);
+  const item = (x) => `
+    <li class="fb-item">
+      <div class="row between fb-head">
+        <span><span class="chip sm">${FB_KIND[x.kind]?.[0] || '💬'} ${esc(FB_KIND[x.kind]?.[1] || 'Other')}</span> <b>${esc(x.display_name || 'Someone')}</b></span>
+        <span class="tiny muted">${fmtDate(x.created_at)}</span>
+      </div>
+      <p class="fb-msg">${esc(x.message).replace(/\n/g, '<br>')}</p>
+      ${x.app_version ? `<p class="tiny muted">${esc(x.app_version)}</p>` : ''}
+      <div class="seg fb-status">${FB_STATUS.map(([v, label]) =>
+        `<button class="${x.status === v ? 'on' : ''}" data-action="inbox-status" data-id="${esc(x.id)}" data-status="${v}">${label}</button>`).join('')}</div>
+      <div class="row fb-note"><input id="note-${esc(x.id)}" maxlength="2000" placeholder="Private note (only you see it)" value="${esc(x.note || '')}">
+        <button data-action="inbox-note" data-id="${esc(x.id)}">Save</button></div>
+    </li>`;
+  return `
+  <div class="overlay" data-action="close-modal-bg">
+    <div class="modal inbox" role="dialog" aria-label="Feedback inbox">
+      <div class="row between"><h2>Feedback inbox</h2><button class="link" data-action="close-modal">Done</button></div>
+      <div class="seg fb-filter">${[['all', 'All', ib.items.length], ...FB_STATUS.map(([v, l]) => [v, l, counts[v]])].map(([v, l, n]) =>
+        `<button class="${ib.filter === v ? 'on' : ''}" data-action="inbox-filter" data-filter-by="${v}">${l} <span class="muted">${n}</span></button>`).join('')}</div>
+      <ul class="fb-list">${shown.map(item).join('') || `<li class="empty">${ib.items.length ? 'Nothing here.' : 'No feedback yet. When someone sends some, it shows up here.'}</li>`}</ul>
+    </div>
+  </div>`;
+}
+
 function renderModal() {
   const root = $('#modal-root');
-  if (state.guide) root.innerHTML = guideModal();
+  if (state.feedback) root.innerHTML = feedbackModal();
+  else if (state.inbox) root.innerHTML = inboxModal();
+  else if (state.guide) root.innerHTML = guideModal();
   else if (state.manual) root.innerHTML = manualModal();
   else if (state.rating) root.innerHTML = rateModal();
   else if (state.maker) { root.innerHTML = makerModal(); updateMakerCount(); }
@@ -1246,6 +1301,7 @@ async function act(fn) {
 function closeModals() {
   state.search = null; state.rating = null; state.manual = null; state.guide = false;
   state.importing = null; state.queueItem = null; state.playlist = null; state.maker = null; state.returnTo = null;
+  state.feedback = null; state.inbox = null;
   audio.pause();
   renderModal();
 }
@@ -1343,6 +1399,46 @@ document.addEventListener('click', (e) => {
     case 'preview': togglePreview(el.dataset.url, el); break;
     case 'filter-tag': state.filters = { ...state.filters, tag: el.dataset.tag }; state.view = 'library'; state.leftView = 'library'; render(); break;
     case 'import-open': openImport(); break;
+    case 'feedback-open': closeProfileMenus(); closeModals(); state.feedback = { kind: 'idea', text: '', busy: false }; renderModal(); $('#fb-text')?.focus(); break;
+    case 'fb-kind': state.feedback.text = $('#fb-text')?.value || ''; state.feedback.kind = el.dataset.kind; renderModal(); break;
+    case 'fb-send': {
+      const f = state.feedback;
+      f.text = $('#fb-text')?.value || '';
+      if (!f.text.trim()) { toast('Write a few words first.'); break; }
+      f.busy = true; renderModal();
+      store.sendFeedback({ kind: f.kind, message: f.text, display_name: state.me?.display_name, app_version: screenInfo() })
+        .then(() => {
+          closeModals(); toast('Thanks! Your feedback was sent.');
+          if (state.keeper) { state.inboxNew += 1; render(); }
+        })
+        .catch((e) => { f.busy = false; renderModal(); toast(e.message || "Couldn't send it. Try again in a bit."); });
+      break;
+    }
+    case 'inbox-open':
+      closeProfileMenus(); closeModals();
+      act(async () => {
+        state.inbox = { items: await store.feedbackList(), filter: 'new' };
+        if (!state.inbox.items.some((x) => x.status === 'new')) state.inbox.filter = 'all';
+        renderModal();
+      });
+      break;
+    case 'inbox-filter': state.inbox.filter = el.dataset.filterBy; renderModal(); break;
+    case 'inbox-status': {
+      const x = state.inbox.items.find((r) => r.id === id);
+      if (!x) break;
+      const before = x.status; x.status = el.dataset.status;
+      state.inboxNew = state.inbox.items.filter((r) => r.status === 'new').length;
+      render();
+      store.updateFeedback(id, { status: x.status }).catch((e) => { x.status = before; renderModal(); toast(e.message || "Couldn't save that."); });
+      break;
+    }
+    case 'inbox-note': {
+      const x = state.inbox.items.find((r) => r.id === id);
+      const val = document.getElementById(`note-${id}`)?.value ?? '';
+      if (x) act(async () => { await store.updateFeedback(id, { note: val }); x.note = val.trim() || null; toast('Note saved'); });
+      break;
+    }
+
     case 'rail-find': {
       if (state.leftView !== 'library') { state.leftView = 'library'; render(); }
       const box = document.querySelector('.col [data-filter="q"]');
@@ -1549,7 +1645,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.querySelector('.profile.open')) { closeProfileMenus(); return; }
     if (state.guide) { state.guide = false; renderModal(); return; }
-    if (state.search || state.rating || state.manual || state.importing || state.playlist || state.maker) { closeModals(); return; }
+    if (state.search || state.rating || state.manual || state.importing || state.playlist || state.maker || state.feedback || state.inbox) { closeModals(); return; }
   }
   if (e.target.id !== 'search-input' || !state.search) return;
   const s = state.search;

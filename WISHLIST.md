@@ -9,6 +9,12 @@ he names. When an item is built, move it to "Done" with the date.
 
 ## Done
 
+**Built 2026-11-22 (v27):**
+- #16 Feedback: **Send feedback…** in the profile menu (Idea / Something's wrong / Other, plus a message; the app adds
+  the sender's name, version and screen details). Stored in Supabase (`feedback`); senders can only add. The keeper
+  (`app_keepers`) gets **Feedback inbox** in the profile menu with a count of new items, a status for each (New,
+  Planned, Done, Won't do) and a private note. The bottom label is back to just the version.
+
 **Built 2026-11-22 (v22–v23):**
 - #15 Fill the Duo's inside screen: columns reach the screen edges with the gap still on the fold; text, covers,
   badges and the Rank button a little bigger. Held wide, a **quick-button rail** fills the strip under the clock

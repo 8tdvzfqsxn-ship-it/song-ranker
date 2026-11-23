@@ -1,7 +1,7 @@
 // Where accounts, rankings and friends are kept.
 // Two versions with the same functions: practice mode (this browser only) and Supabase (live).
 // Practice mode leaves out the extras that need a server, like the other catalogs.
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=26';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js?v=27';
 
 export const isDemo = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
@@ -20,6 +20,19 @@ const pickPlaylist = (p) => ({
   songs: (p.songs || []).slice(0, 500).map((x) => Object.fromEntries(PL_SONG_FIELDS.map((f) => [f, x[f] ?? null]))),
   settings: p.settings || {},
 });
+// Feedback from the app's users (supabase/setup.sql: feedback). Kept short; the keeper sets status and a note.
+const FB_KINDS = ['idea', 'problem', 'other'];
+const FB_STATUSES = ['new', 'planned', 'done', 'wont'];
+const pickFeedback = (f) => ({
+  kind: FB_KINDS.includes(f.kind) ? f.kind : 'other',
+  message: String(f.message || '').trim().slice(0, 2000),
+  display_name: String(f.display_name || '').slice(0, 80) || null,
+  app_version: String(f.app_version || '').slice(0, 120) || null,
+});
+const pickFeedbackEdit = (f) => Object.fromEntries(Object.entries({
+  status: FB_STATUSES.includes(f.status) ? f.status : undefined,
+  note: f.note === undefined ? undefined : (String(f.note).trim().slice(0, 2000) || null),
+}).filter(([, v]) => v !== undefined));
 const chunks = (xs, n) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 function groupFriends(rows, profiles, uid) {
@@ -108,6 +121,16 @@ function demoStore() {
       return row;
     },
     async deletePlaylist(id) { db.playlists[uid] = (db.playlists[uid] || []).filter((x) => x.id !== id); save(); },
+    // Feedback: in practice mode you're the keeper, so you see your own inbox.
+    async sendFeedback(f) {
+      const row = pickFeedback(f);
+      if (!row.message) throw new Error('Write a few words first.');
+      (db.feedback ||= []).push({ ...row, id: `fb-${Date.now()}`, user_id: uid, status: 'new', note: null, created_at: new Date().toISOString() });
+      save();
+    },
+    async isKeeper() { return true; },
+    async feedbackList() { return [...(db.feedback || [])].sort((a, b) => b.created_at.localeCompare(a.created_at)); },
+    async updateFeedback(id, f) { const x = (db.feedback || []).find((r) => r.id === id); if (x) { Object.assign(x, pickFeedbackEdit(f)); save(); } },
     // Skip = to the back of the line.
     async skipUnranked(id) {
       const x = (db.unranked[uid] || []).find((r) => r.id === id);
@@ -250,6 +273,18 @@ async function supabaseStore() {
         : ok(await sb.from('playlists').insert(row).select().single());
     },
     async deletePlaylist(id) { ok(await sb.from('playlists').delete().eq('user_id', uid).eq('id', id)); },
+    // Feedback (supabase/setup.sql: feedback). Anyone signed in can send; only the keeper reads and edits.
+    async sendFeedback(f) {
+      const row = pickFeedback(f);
+      if (!row.message) throw new Error('Write a few words first.');
+      ok(await sb.from('feedback').insert({ ...row, user_id: uid }));
+    },
+    async isKeeper() { return ok(await sb.from('app_keepers').select('user_id').eq('user_id', uid)).length > 0; },
+    async feedbackList() {
+      return ok(await sb.from('feedback').select('id, kind, message, display_name, app_version, status, note, created_at')
+        .order('created_at', { ascending: false }).limit(500));
+    },
+    async updateFeedback(id, f) { ok(await sb.from('feedback').update(pickFeedbackEdit(f)).eq('id', id)); },
     async skipUnranked(id) {
       ok(await sb.from('unranked').update({ added_at: new Date().toISOString() }).eq('user_id', uid).eq('id', id));
     },
