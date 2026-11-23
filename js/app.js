@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=19';
-import { searchSongs } from './itunes.js?v=19';
+import { createStore, isDemo } from './store.js?v=20';
+import { searchSongs } from './itunes.js?v=20';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=19';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=19';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=19';
+} from './stats.js?v=20';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=20';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=20';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -172,8 +172,14 @@ const DUO_LONG = 951;
 // Where the fold falls on the page when held tall. Safari's toolbars sit above the page, so the page's top is
 // that much below the screen's top; the Home Screen app fills the screen and the fold is simply the middle.
 const foldY = () => { const screenH = Math.max(innerHeight, DUO_LONG); return Math.round(screenH / 2 - (screenH - innerHeight)); };
+// Temporary (v20): the version label also shows the screen size and which layout is in use, so a screenshot
+// from the Duo tells us what the app sees. Remove once the half-open layouts are confirmed.
+const VERSION = (document.querySelector('.version')?.textContent || '').trim().split(' ')[0];
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function fitFold() {
   const root = document.documentElement;
+  const label = document.querySelector('.version');
+  if (label) label.textContent = `${VERSION} · ${innerWidth}×${innerHeight} · ${duoTall.matches ? 'Duo tall' : duoWide.matches ? 'Duo wide' : wideScreen.matches ? 'wide' : 'phone'} · ${standalone ? 'app' : 'Safari'}`;
   root.classList.toggle('duo-tall', duoTall.matches);
   root.classList.toggle('duo-wide', duoWide.matches);
   const cols = document.querySelector('.cols');
@@ -211,7 +217,7 @@ function mainView() {
     // One top row: logo, Rank button and profile (the usual header is hidden).
     return `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=19" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=20" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>

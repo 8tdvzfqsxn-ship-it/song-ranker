@@ -3,7 +3,7 @@
 // 1. Seeds: the artists behind your 80+ songs, high and recent scores counting most.
 // 2. Deezer's "related artists" for each seed; an artist several of your favorites point to ranks higher.
 // 3. Their top songs, leaving out what you've ranked, have waiting, or said "Not for me" to.
-import { songKey } from './stats.js?v=19';
+import { songKey } from './stats.js?v=20';
 
 const API = 'https://api.deezer.com';
 const DAY = 86400000;
