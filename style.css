@@ -408,3 +408,5 @@ html.duo-wide .rail-btn { padding: 4px 0 3px; gap: 2px; }
 html.duo-wide .rail-btn .ic { width: 40px; height: 40px; }
 html.duo-wide .rail-btn.main .ic { width: 46px; height: 46px; }
 html.duo-wide .rail-me { margin-top: 6px; }
+/* v25: app.js sets --rail-top from where the page starts on the screen. */
+html.duo-wide .rail { top: var(--rail-top, 198px); }

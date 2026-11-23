@@ -1,11 +1,11 @@
-import { createStore, isDemo } from './store.js?v=24';
-import { searchSongs } from './itunes.js?v=24';
+import { createStore, isDemo } from './store.js?v=25';
+import { searchSongs } from './itunes.js?v=25';
 import {
   tasteStats, compare, songKey, decadeOf, decadeLabel,
   TIERS, tierOf, STALE_DAYS, daysSince, historyBySong, tasteOverTime,
-} from './stats.js?v=24';
-import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=24';
-import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=24';
+} from './stats.js?v=25';
+import { readFileText, parseSongs, sortImport, searchTermFor, detectSource } from './importer.js?v=25';
+import { buildForYou, buildRecs, freshPreviews } from './recommend.js?v=25';
 
 const SUGGESTED_TAGS = ['Nighttime driving', 'Shower songs', 'Cooking songs', 'Workout', 'Road trip', 'Rainy day', 'Focus', 'Party'];
 const COMMON_GENRES = ['Pop', 'Rock', 'Hip-Hop/Rap', 'R&B/Soul', 'Country', 'Alternative', 'Indie', 'Electronic', 'Dance',
@@ -170,6 +170,7 @@ const duoWide = matchMedia('(min-width: 900px) and (max-width: 1000px) and (min-
 const wideScreen = matchMedia(`(min-width: 700px), ${DUO_TALL_Q}`);
 wideScreen.addEventListener('change', () => { if (state.uid) render(); });
 const DUO_LONG = 951;
+const DUO_SHORT = 669;
 // Where the fold falls on the page when held tall. Safari's toolbars sit above the page, so the page's top is
 // that much below the screen's top; the Home Screen app fills the screen and the fold is simply the middle.
 const foldY = () => { const screenH = Math.max(innerHeight, DUO_LONG); return Math.round(screenH / 2 - (screenH - innerHeight)); };
@@ -186,6 +187,9 @@ function fitFold() {
   const cols = document.querySelector('.cols');
   const range = document.querySelector('.modal #score-range');
   if (range) range.style.marginTop = '';
+  // Held wide, the clock and music area reaches about 190 points down the screen. Sometimes the page starts below
+  // a band at the top (it's then shorter than the 669-point screen), so the rail's top moves up by that band.
+  if (duoWide.matches) root.style.setProperty('--rail-top', `${Math.max(16, 198 - Math.max(0, DUO_SHORT - innerHeight))}px`);
   if (!duoTall.matches) { if (cols) cols.style.gridTemplateRows = ''; return; }
   const y = foldY();
   root.style.setProperty('--fold-y', `${y}px`);
@@ -219,7 +223,7 @@ function mainView() {
     // Elsewhere: one top row with logo, Rank button and profile (the usual header is hidden).
     return `${duoWide.matches ? railHtml() : `
     <div class="wide-top">
-      <div class="brand"><img class="logo" src="img/logo.svg?v=24" alt="">Song Ranker</div>
+      <div class="brand"><img class="logo" src="img/logo.svg?v=25" alt="">Song Ranker</div>
       <div class="wide-rank">
         <button class="primary big" data-action="open-search">＋ Rank a song</button>
         <button class="link small" data-action="open-guide">How should I score songs?</button>
