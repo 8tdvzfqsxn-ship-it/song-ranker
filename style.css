@@ -357,3 +357,7 @@ html.duo-tall .cols { grid-template-columns: minmax(0, 1fr); row-gap: 24px; }
 html.duo-tall .wide-top { grid-template-columns: auto minmax(200px, 300px) auto; justify-content: space-between; }
 html.duo-wide .overlay { justify-content: flex-end; padding-left: calc(50% + 16px); padding-right: max(16px, env(safe-area-inset-right)); }
 html.duo-wide .modal { max-width: none; }
+/* v21: held wide, the Duo keeps its clock and icons in a strip down the right edge (a wide safe area there), which
+   pushed the columns left of the fold. Equal room on both sides puts the gap between the columns on the fold. */
+html.duo-wide body { padding-left: max(env(safe-area-inset-left), env(safe-area-inset-right));
+  padding-right: max(env(safe-area-inset-left), env(safe-area-inset-right)); }
